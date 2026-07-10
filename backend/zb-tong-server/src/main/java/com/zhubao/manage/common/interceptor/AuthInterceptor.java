@@ -39,11 +39,15 @@ public class AuthInterceptor implements HandlerInterceptor {
             Claims claims = jwtUtil.parseToken(token);
             Long userId = claims.get("userId", Long.class);
             String username = claims.getSubject();
+            Long storeId = claims.get("storeId", Long.class);
+            Long regionId = claims.get("regionId", Long.class);
 
-            // 注入用户上下文
+            // 注入用户上下文（含数据权限所需的 storeId/regionId）
             UserContext context = new UserContext();
             context.setUserId(userId);
             context.setUsername(username);
+            context.setStoreId(storeId);
+            context.setRegionId(regionId);
             userContextHolder.set(context);
 
             log.debug("认证通过: userId={}, username={}, uri={}", userId, username, request.getRequestURI());

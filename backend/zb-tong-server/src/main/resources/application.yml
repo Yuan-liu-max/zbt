@@ -13,8 +13,8 @@ spring:
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
     url: jdbc:mysql://localhost:3306/zb_tong?useUnicode=true&characterEncoding=utf-8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
-    username: root
-    password: root
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD:root}
     hikari:
       minimum-idle: 5
       maximum-pool-size: 20
@@ -69,7 +69,7 @@ mybatis-plus:
       logic-delete-field: isDeleted
       logic-delete-value: 1
       logic-not-delete-value: 0
-      table-prefix: sys_
+      # table-prefix 不设全局值，各实体通过 @TableName 显式声明
   configuration:
     map-underscore-to-camel-case: true
     cache-enabled: false
@@ -83,10 +83,42 @@ knife4j:
 
 # JWT配置
 jwt:
-  secret: ZbtProject2026SecretKeyForJwtTokenGenerationAndValidation32Bytes
+  secret: ${JWT_SECRET:ZbtProject2026SecretKeyForJwtTokenGenerationAndValidation32Bytes}
   expiration: 7200000
   header: Authorization
   token-prefix: "Bearer "
+
+# 文件存储配置
+file:
+  storage:
+    type: minio
+    pre-url-expiry: 600
+    minio:
+      endpoint: http://localhost:9000
+      access-key: ${MINIO_ACCESS_KEY:minioadmin}
+      secret-key: ${MINIO_SECRET_KEY:minioadmin}
+      bucket: zbtong
+
+# XXL-JOB 配置
+xxl:
+  job:
+    admin:
+      addresses: http://localhost:8080/xxl-job-admin
+    accessToken: ${XXL_ACCESS_TOKEN:default_token}
+    executor:
+      appname: zb-tong-executor
+      address:
+      ip:
+      port: 9999
+      logpath: logs/xxl-job
+      logretentiondays: 30
+
+# AI配置
+ai:
+  openai:
+    api-key: ${OPENAI_API_KEY:sk-your-key}
+    model: gpt-4
+    timeout: 120
 
 # 日志配置
 logging:

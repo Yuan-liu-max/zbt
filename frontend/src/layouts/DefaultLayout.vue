@@ -1,5 +1,5 @@
 <template>
-  <a-config-provider :theme="themeConfig">
+  <a-config-provider :theme="themeConfig" :locale="zhCN">
     <a-layout class="layout-wrapper">
       <!-- ==================== PC 展开侧边栏（大屏） ==================== -->
       <a-layout-sider
@@ -396,6 +396,12 @@ const themeConfig = {
     fontFamily: "'PingFang SC', 'Microsoft YaHei', -apple-system, sans-serif",
   },
 }
+
+// 中文语言包
+import zhCN from 'ant-design-vue/es/locale/zh_CN'
+import dayjs from 'dayjs'
+import 'dayjs/locale/zh-cn'
+dayjs.locale('zh-cn')
 </script>
 
 <style lang="less" scoped>
