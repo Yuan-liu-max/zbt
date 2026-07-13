@@ -13,5 +13,7 @@ public class EmployeeTrainingRecord {
     private Long employeeId;
     private String signInStatus;
     private BigDecimal examScore;
+    @TableLogic private Integer isDeleted;
+
     @TableField(fill = FieldFill.INSERT) private LocalDateTime createdAt;
 }

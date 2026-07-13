@@ -24,6 +24,8 @@ public class EmployeeInterview {
     private String managerComment;
     private String employeeFeedback;
     private LocalDate followUpDate;
+    @TableLogic private Integer isDeleted;
+
     @TableField(fill = FieldFill.INSERT) private LocalDateTime createdAt;
     @TableField(fill = FieldFill.INSERT_UPDATE) private LocalDateTime updatedAt;
 }

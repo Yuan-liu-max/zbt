@@ -1,6 +1,8 @@
 package com.zhubao.manage.common.interceptor;
 
 import com.zhubao.manage.common.utils.JwtUtil;
+import com.zhubao.manage.module.user.entity.User;
+import com.zhubao.manage.module.user.mapper.UserMapper;
 import io.jsonwebtoken.Claims;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -11,7 +13,7 @@ import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
 /**
- * JWT认证拦截器 —— 校验Token并注入用户上下文
+ * JWT认证拦截器 —— 校验Token并注入用户上下文（含 storeId/regionId）
  */
 @Component
 public class AuthInterceptor implements HandlerInterceptor {
@@ -20,10 +22,13 @@ public class AuthInterceptor implements HandlerInterceptor {
 
     private final JwtUtil jwtUtil;
     private final UserContextHolder userContextHolder;
+    private final UserMapper userMapper;
 
-    public AuthInterceptor(JwtUtil jwtUtil, UserContextHolder userContextHolder) {
+    public AuthInterceptor(JwtUtil jwtUtil, UserContextHolder userContextHolder,
+                           UserMapper userMapper) {
         this.jwtUtil = jwtUtil;
         this.userContextHolder = userContextHolder;
+        this.userMapper = userMapper;
     }
 
     @Override
@@ -38,11 +43,25 @@ public class AuthInterceptor implements HandlerInterceptor {
         try {
             Claims claims = jwtUtil.parseToken(token);
             Long userId = claims.get("userId", Long.class);
+
+            // username: subject 优先，备用 claims.get("username")
             String username = claims.getSubject();
+            if (username == null) {
+                username = claims.get("username", String.class);
+            }
+
+            // storeId/regionId: JWT claims 优先（新Token），null时DB回查（旧Token）
             Long storeId = claims.get("storeId", Long.class);
             Long regionId = claims.get("regionId", Long.class);
 
-            // 注入用户上下文（含数据权限所需的 storeId/regionId）
+            if (storeId == null && regionId == null && userId != null) {
+                User user = userMapper.selectById(userId);
+                if (user != null) {
+                    storeId = user.getStoreId();
+                    regionId = user.getRegionId();
+                }
+            }
+
             UserContext context = new UserContext();
             context.setUserId(userId);
             context.setUsername(username);
@@ -50,7 +69,8 @@ public class AuthInterceptor implements HandlerInterceptor {
             context.setRegionId(regionId);
             userContextHolder.set(context);
 
-            log.debug("认证通过: userId={}, username={}, uri={}", userId, username, request.getRequestURI());
+            log.debug("认证通过: userId={}, storeId={}, regionId={}, uri={}",
+                    userId, storeId, regionId, request.getRequestURI());
             return true;
 
         } catch (Exception e) {
@@ -60,9 +80,6 @@ public class AuthInterceptor implements HandlerInterceptor {
         }
     }
 
-    /**
-     * 从请求头提取 Bearer Token
-     */
     private String extractToken(HttpServletRequest request) {
         String header = request.getHeader("Authorization");
         if (header != null && header.startsWith("Bearer ")) {
@@ -74,7 +91,6 @@ public class AuthInterceptor implements HandlerInterceptor {
     @Override
     public void afterCompletion(HttpServletRequest request, HttpServletResponse response,
                                 Object handler, Exception ex) {
-        // 请求结束后清理上下文，防止内存泄漏
         userContextHolder.clear();
     }
 }

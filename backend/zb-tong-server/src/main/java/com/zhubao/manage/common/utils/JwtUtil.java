@@ -68,14 +68,17 @@ public class JwtUtil {
     }
 
     /**
-     * 生成 JWT Token（带额外 claims）
+     * 生成 JWT Token（带额外 claims，自动设置 subject=username）
      */
     public String generateToken(Map<String, Object> claims) {
         Date now = new Date();
         Date expireDate = new Date(now.getTime() + expiration);
 
+        String username = (String) claims.getOrDefault("username", claims.get("userId"));
+
         return Jwts.builder()
                 .setClaims(claims)
+                .setSubject(username)
                 .setIssuedAt(now)
                 .setExpiration(expireDate)
                 .signWith(getSigningKey(), SignatureAlgorithm.HS256)

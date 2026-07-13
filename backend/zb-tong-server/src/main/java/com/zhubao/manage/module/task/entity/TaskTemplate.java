@@ -13,6 +13,7 @@ public class TaskTemplate {
     @TableId(type = IdType.AUTO)
     private Long id;
 
+    @javax.validation.constraints.NotBlank(message = "模板名称不能为空")
     private String templateName;
     private Long actionId;
     private String dimension;

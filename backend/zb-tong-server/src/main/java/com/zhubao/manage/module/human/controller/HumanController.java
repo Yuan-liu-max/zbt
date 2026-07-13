@@ -8,7 +8,9 @@ import com.zhubao.manage.common.dto.PageResult;
 import com.zhubao.manage.module.human.entity.*;
 import com.zhubao.manage.module.human.mapper.*;
 import com.zhubao.manage.module.human.service.HumanService;
+import javax.validation.Valid;
 import io.swagger.annotations.Api;
+import javax.validation.Valid;
 import io.swagger.annotations.ApiOperation;
 import org.springframework.web.bind.annotation.*;
 
@@ -18,6 +20,7 @@ import java.util.Map;
 @Api(tags = "人效管理")
 @RestController
 @RequestMapping("/human")
+@org.springframework.security.access.prepost.PreAuthorize("isAuthenticated()")
 public class HumanController {
 
     private final HumanService svc;
@@ -49,9 +52,9 @@ public class HumanController {
     @ApiOperation("员工档案列表") @GetMapping("/employees")
     public ApiResult<List<EmployeeProfile>> listEmployees() { return ApiResult.ok(svc.all(profileMapper, new LambdaQueryWrapper<>())); }
     @ApiOperation("新增员工档案") @PostMapping("/employees")
-    public ApiResult<Void> createEmployee(@RequestBody EmployeeProfile e) { svc.save(profileMapper, e); return ApiResult.ok(); }
+    public ApiResult<Void> createEmployee(@Valid @RequestBody EmployeeProfile e) { svc.save(profileMapper, e); return ApiResult.ok(); }
     @ApiOperation("更新员工档案") @PutMapping("/employees/{id}")
-    public ApiResult<Void> updateEmployee(@PathVariable Long id, @RequestBody EmployeeProfile e) { e.setId(id); svc.update(profileMapper, e); return ApiResult.ok(); }
+    public ApiResult<Void> updateEmployee(@PathVariable Long id, @Valid @RequestBody EmployeeProfile e) { e.setId(id); svc.update(profileMapper, e); return ApiResult.ok(); }
 
     // ===== 面谈 =====
     @ApiOperation("面谈列表") @GetMapping("/interviews")
@@ -60,9 +63,9 @@ public class HumanController {
     public ApiResult<PageResult<EmployeeInterview>> pageInterviews(PageDTO dto) {
         IPage<EmployeeInterview> r = svc.page(interviewMapper, dto, new LambdaQueryWrapper<>()); return ApiResult.ok(PageResult.of(r)); }
     @ApiOperation("新增面谈") @PostMapping("/interviews")
-    public ApiResult<Void> createInterview(@RequestBody EmployeeInterview e) { svc.save(interviewMapper, e); return ApiResult.ok(); }
+    public ApiResult<Void> createInterview(@Valid @RequestBody EmployeeInterview e) { svc.save(interviewMapper, e); return ApiResult.ok(); }
     @ApiOperation("更新面谈") @PutMapping("/interviews/{id}")
-    public ApiResult<Void> updateInterview(@PathVariable Long id, @RequestBody EmployeeInterview e) { e.setId(id); svc.update(interviewMapper, e); return ApiResult.ok(); }
+    public ApiResult<Void> updateInterview(@PathVariable Long id, @Valid @RequestBody EmployeeInterview e) { e.setId(id); svc.update(interviewMapper, e); return ApiResult.ok(); }
     @ApiOperation("删除面谈") @DeleteMapping("/interviews/{id}")
     public ApiResult<Void> deleteInterview(@PathVariable Long id) { svc.del(interviewMapper, id); return ApiResult.ok(); }
 
@@ -70,27 +73,27 @@ public class HumanController {
     @ApiOperation("考核列表") @GetMapping("/assessments")
     public ApiResult<List<EmployeeAssessment>> listAssessments() { return ApiResult.ok(svc.all(assessmentMapper, new LambdaQueryWrapper<>())); }
     @ApiOperation("新增考核") @PostMapping("/assessments")
-    public ApiResult<Void> createAssessment(@RequestBody EmployeeAssessment e) { svc.save(assessmentMapper, e); return ApiResult.ok(); }
+    public ApiResult<Void> createAssessment(@Valid @RequestBody EmployeeAssessment e) { svc.save(assessmentMapper, e); return ApiResult.ok(); }
     @ApiOperation("更新考核") @PutMapping("/assessments/{id}")
-    public ApiResult<Void> updateAssessment(@PathVariable Long id, @RequestBody EmployeeAssessment e) { e.setId(id); svc.update(assessmentMapper, e); return ApiResult.ok(); }
+    public ApiResult<Void> updateAssessment(@PathVariable Long id, @Valid @RequestBody EmployeeAssessment e) { e.setId(id); svc.update(assessmentMapper, e); return ApiResult.ok(); }
 
     // ===== 培训 =====
     @ApiOperation("培训列表") @GetMapping("/trainings")
     public ApiResult<List<EmployeeTraining>> listTrainings() { return ApiResult.ok(svc.all(trainingMapper, new LambdaQueryWrapper<>())); }
     @ApiOperation("新增培训") @PostMapping("/trainings")
-    public ApiResult<Void> createTraining(@RequestBody EmployeeTraining e) { svc.save(trainingMapper, e); return ApiResult.ok(); }
+    public ApiResult<Void> createTraining(@Valid @RequestBody EmployeeTraining e) { svc.save(trainingMapper, e); return ApiResult.ok(); }
     @ApiOperation("培训签到") @PostMapping("/trainings/{id}/sign-in")
-    public ApiResult<Void> signIn(@PathVariable Long id, @RequestBody EmployeeTrainingRecord e) { e.setTrainingId(id); svc.save(trainingRecordMapper, e); return ApiResult.ok(); }
+    public ApiResult<Void> signIn(@PathVariable Long id, @Valid @RequestBody EmployeeTrainingRecord e) { e.setTrainingId(id); svc.save(trainingRecordMapper, e); return ApiResult.ok(); }
 
     // ===== 月度复盘 =====
     @ApiOperation("复盘列表") @GetMapping("/monthly-reviews")
     public ApiResult<List<EmployeeMonthlyReview>> listReviews() { return ApiResult.ok(svc.all(monthlyReviewMapper, new LambdaQueryWrapper<>())); }
     @ApiOperation("新增复盘") @PostMapping("/monthly-reviews")
-    public ApiResult<Void> createReview(@RequestBody EmployeeMonthlyReview e) { svc.save(monthlyReviewMapper, e); return ApiResult.ok(); }
+    public ApiResult<Void> createReview(@Valid @RequestBody EmployeeMonthlyReview e) { svc.save(monthlyReviewMapper, e); return ApiResult.ok(); }
 
     // ===== 分层定级 =====
     @ApiOperation("分层列表") @GetMapping("/level-records")
     public ApiResult<List<EmployeeLevelRecord>> listLevels() { return ApiResult.ok(svc.all(levelRecordMapper, new LambdaQueryWrapper<>())); }
     @ApiOperation("新增分层") @PostMapping("/level-records")
-    public ApiResult<Void> createLevel(@RequestBody EmployeeLevelRecord e) { svc.save(levelRecordMapper, e); return ApiResult.ok(); }
+    public ApiResult<Void> createLevel(@Valid @RequestBody EmployeeLevelRecord e) { svc.save(levelRecordMapper, e); return ApiResult.ok(); }
 }

@@ -17,5 +17,7 @@ public class SceneEquipmentCheck {
     private String issueDescription;
     private Integer repairRequired;
     private String photoUrls;
+    @TableLogic private Integer isDeleted;
+
     @TableField(fill = FieldFill.INSERT) private LocalDateTime createdAt;
 }

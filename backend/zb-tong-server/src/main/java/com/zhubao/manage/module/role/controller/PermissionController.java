@@ -15,6 +15,7 @@ import java.util.Map;
 @Api(tags = "权限管理")
 @RestController
 @RequestMapping("/permissions")
+@org.springframework.security.access.prepost.PreAuthorize("hasRole('ADMIN')")
 public class PermissionController {
 
     private final PermissionService permissionService;

@@ -17,6 +17,7 @@ import java.util.List;
 @Api(tags = "任务管理")
 @RestController
 @RequestMapping("/tasks")
+@org.springframework.security.access.prepost.PreAuthorize("isAuthenticated()")
 public class TaskController {
 
     private final TaskService taskService;

@@ -19,6 +19,7 @@ import java.util.Map;
 @Api(tags = "业绩管理")
 @RestController
 @RequestMapping("/sales")
+@org.springframework.security.access.prepost.PreAuthorize("isAuthenticated()")
 public class SalesController {
 
     private final SalesService salesService;

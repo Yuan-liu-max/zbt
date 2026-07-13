@@ -18,5 +18,7 @@ public class ProductSalesAnalysis {
     private String stockoutRiskProducts;
     private String analysisSummary;
     private String actionPlan;
+    @TableLogic private Integer isDeleted;
+
     @TableField(fill = FieldFill.INSERT) private LocalDateTime createdAt;
 }

@@ -15,6 +15,7 @@ import java.util.List;
 @Api(tags = "动作库管理")
 @RestController
 @RequestMapping("/action-templates")
+@org.springframework.security.access.prepost.PreAuthorize("hasAnyRole('ADMIN','HQ')")
 public class ActionTemplateController {
 
     private final ActionTemplateService actionTemplateService;

@@ -8,6 +8,7 @@ import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiOperation;
 import org.springframework.web.bind.annotation.*;
 
+import org.springframework.security.access.prepost.PreAuthorize;
 import javax.validation.Valid;
 
 @Api(tags = "认证管理")
@@ -27,12 +28,14 @@ public class AuthController {
         return ApiResult.ok(authService.login(dto));
     }
 
+    @PreAuthorize("isAuthenticated()")
     @ApiOperation("获取当前用户信息")
     @GetMapping("/me")
     public ApiResult<LoginResultDTO> me() {
         return ApiResult.ok(authService.getCurrentUser());
     }
 
+    @PreAuthorize("isAuthenticated()")
     @ApiOperation("用户登出")
     @PostMapping("/logout")
     public ApiResult<Void> logout() {

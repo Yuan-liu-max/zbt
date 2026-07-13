@@ -9,14 +9,14 @@
         </h2>
         <p class="welcome-date">今天是 {{ todayStr }} {{ weekdayStr }}</p>
       </div>
-      <a-button type="primary" ghost>
+      <a-button type="primary" ghost @click="router.push('/dashboard/settings')">
         <SettingOutlined /> 自定义设置
       </a-button>
     </div>
 
     <!-- ==================== 统计卡片 ==================== -->
     <div class="dashboard-stats">
-      <div v-for="(item, idx) in statCards" :key="idx" class="stat-card">
+      <div v-for="(item, idx) in statCards" :key="idx" class="stat-card" @click="router.push(item.path)">
         <div class="stat-card__header">
           <div class="stat-card__label">{{ item.label }}</div>
           <div :class="['stat-card__icon', item.color]">
@@ -144,7 +144,7 @@
       <div class="content-card">
         <div class="content-card__header">
           <h3>最新订单</h3>
-          <a-button type="link" size="small">更多 <RightOutlined /></a-button>
+          <a-button type="link" size="small" @click="router.push('/order/list')">更多 <RightOutlined /></a-button>
         </div>
 
         <!-- 大屏表格 -->
@@ -163,7 +163,7 @@
               <a-tag :color="getStatusColor(record.status)">{{ record.status }}</a-tag>
             </template>
             <template v-if="column.key === 'action'">
-              <a-button type="link" size="small">查看</a-button>
+              <a-button type="link" size="small" @click="router.push('/order/list')">查看</a-button>
             </template>
           </template>
         </a-table>
@@ -194,7 +194,7 @@
         <div class="content-card">
           <div class="content-card__header">
             <h3>待办事项</h3>
-            <a-button type="link" size="small">更多 <RightOutlined /></a-button>
+            <a-button type="link" size="small" @click="router.push('/task/list')">更多 <RightOutlined /></a-button>
           </div>
           <div class="todo-list">
             <div v-for="(item, idx) in todoItems" :key="idx" class="todo-item">
@@ -208,7 +208,7 @@
         <div class="content-card">
           <div class="content-card__header">
             <h3>系统通知</h3>
-            <a-button type="link" size="small">更多 <RightOutlined /></a-button>
+            <a-button type="link" size="small" @click="router.push('/notify')">更多 <RightOutlined /></a-button>
           </div>
           <div class="notice-list">
             <div v-for="(item, idx) in notices" :key="idx" class="notice-item">
@@ -225,6 +225,9 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
+import { useRouter } from 'vue-router'
+
+const router = useRouter()
 import {
   SmileOutlined,
   SettingOutlined,
@@ -250,12 +253,12 @@ const weekdayStr = weekdayMap[now.getDay()]
 
 /* ---------- 统计卡片 ---------- */
 const statCards = ref([
-  { label: '今日销售额', value: '¥1,234,567', icon: ShoppingCartOutlined, color: 'gold', trend: '12.45%', trendDir: 'up' },
-  { label: '今日订单数', value: '126', icon: FileTextOutlined, color: 'blue', trend: '8.00%', trendDir: 'up' },
-  { label: '新增客户数', value: '32', icon: TeamOutlined, color: 'green', trend: '14.29%', trendDir: 'up' },
-  { label: '库存商品数', value: '3,456', icon: DatabaseOutlined, color: 'purple', trend: '3.21%', trendDir: 'down' },
-  { label: '待处理订单', value: '18', icon: AuditOutlined, color: 'orange', trend: '10.00%', trendDir: 'down' },
-  { label: '证书到期预警', value: '7', icon: SafetyCertificateOutlined, color: 'red', trend: '40.00%', trendDir: 'up' },
+  { label: '今日销售额', value: '¥1,234,567', icon: ShoppingCartOutlined, color: 'gold', trend: '12.45%', trendDir: 'up', path: '/sales/report' },
+  { label: '今日订单数', value: '126', icon: FileTextOutlined, color: 'blue', trend: '8.00%', trendDir: 'up', path: '/order/list' },
+  { label: '新增客户数', value: '32', icon: TeamOutlined, color: 'green', trend: '14.29%', trendDir: 'up', path: '/customer/list' },
+  { label: '库存商品数', value: '3,456', icon: DatabaseOutlined, color: 'purple', trend: '3.21%', trendDir: 'down', path: '/inventory/list' },
+  { label: '待处理订单', value: '18', icon: AuditOutlined, color: 'orange', trend: '10.00%', trendDir: 'down', path: '/task/list' },
+  { label: '证书到期预警', value: '7', icon: SafetyCertificateOutlined, color: 'red', trend: '40.00%', trendDir: 'up', path: '/certificate' },
 ])
 
 /* ---------- 趋势区间 ---------- */

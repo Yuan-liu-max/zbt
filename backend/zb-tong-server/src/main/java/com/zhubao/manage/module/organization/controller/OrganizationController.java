@@ -14,6 +14,7 @@ import java.util.Map;
 @Api(tags = "组织管理")
 @RestController
 @RequestMapping("/organizations")
+@org.springframework.security.access.prepost.PreAuthorize("hasRole('ADMIN')")
 public class OrganizationController {
 
     private final OrganizationService organizationService;

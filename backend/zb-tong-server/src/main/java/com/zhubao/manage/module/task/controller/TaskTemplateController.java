@@ -3,7 +3,9 @@ package com.zhubao.manage.module.task.controller;
 import com.zhubao.manage.common.dto.ApiResult;
 import com.zhubao.manage.module.task.entity.TaskTemplate;
 import com.zhubao.manage.module.task.service.TaskTemplateService;
+import javax.validation.Valid;
 import io.swagger.annotations.Api;
+import javax.validation.Valid;
 import io.swagger.annotations.ApiOperation;
 import org.springframework.web.bind.annotation.*;
 
@@ -12,6 +14,7 @@ import java.util.List;
 @Api(tags = "任务模板管理")
 @RestController
 @RequestMapping("/task-templates")
+@org.springframework.security.access.prepost.PreAuthorize("hasAnyRole('ADMIN','HQ')")
 public class TaskTemplateController {
 
     private final TaskTemplateService taskTemplateService;
@@ -34,13 +37,13 @@ public class TaskTemplateController {
 
     @ApiOperation("新增模板")
     @PostMapping
-    public ApiResult<TaskTemplate> create(@RequestBody TaskTemplate entity) {
+    public ApiResult<TaskTemplate> create(@Valid @RequestBody TaskTemplate entity) {
         return ApiResult.ok(taskTemplateService.create(entity));
     }
 
     @ApiOperation("更新模板")
     @PutMapping("/{id}")
-    public ApiResult<TaskTemplate> update(@PathVariable Long id, @RequestBody TaskTemplate entity) {
+    public ApiResult<TaskTemplate> update(@PathVariable Long id, @Valid @RequestBody TaskTemplate entity) {
         return ApiResult.ok(taskTemplateService.update(id, entity));
     }
 

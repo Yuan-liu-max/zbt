@@ -17,5 +17,7 @@ public class SceneMaterialUpdate {
     private String updatedPhotos;
     private String issueDescription;
     private Integer replacementRequired;
+    @TableLogic private Integer isDeleted;
+
     @TableField(fill = FieldFill.INSERT) private LocalDateTime createdAt;
 }

@@ -16,5 +16,7 @@ public class SceneCustomerExperienceReview {
     private String commonFeedback;
     private String improvementPlan;
     private Long responsiblePersonId;
+    @TableLogic private Integer isDeleted;
+
     @TableField(fill = FieldFill.INSERT) private LocalDateTime createdAt;
 }

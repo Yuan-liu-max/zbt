@@ -18,6 +18,7 @@ import java.util.List;
 @Api(tags = "角色管理")
 @RestController
 @RequestMapping("/roles")
+@org.springframework.security.access.prepost.PreAuthorize("hasRole('ADMIN')")
 public class RoleController {
 
     private final RoleService roleService;

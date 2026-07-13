@@ -7,13 +7,18 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.zhubao.manage.common.dto.PageDTO;
 import com.zhubao.manage.common.exception.BusinessException;
 import com.zhubao.manage.common.exception.ErrorCode;
+import com.zhubao.manage.common.interceptor.UserContextHolder;
 import com.zhubao.manage.module.product.entity.*;
 import com.zhubao.manage.module.product.mapper.*;
+import com.zhubao.manage.module.role.entity.Role;
+import com.zhubao.manage.module.role.entity.UserRole;
+import com.zhubao.manage.module.role.mapper.RoleMapper;
+import com.zhubao.manage.module.role.mapper.UserRoleMapper;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
-import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Service
 public class ProductService {
@@ -24,13 +29,18 @@ public class ProductService {
     private final ProductSalesAnalysisMapper salesAnalysisMapper;
     private final NewProductPlanMapper newProductPlanMapper;
     private final PromotionPlanMapper promotionPlanMapper;
+    private final UserContextHolder userContextHolder;
+    private final UserRoleMapper userRoleMapper;
+    private final RoleMapper roleMapper;
 
     public ProductService(ProductMapper pm, ProductInventoryCheckMapper ic,
                           ProductMaintenanceCheckMapper mc, ProductSalesAnalysisMapper sa,
-                          NewProductPlanMapper np, PromotionPlanMapper pp) {
+                          NewProductPlanMapper np, PromotionPlanMapper pp,
+                          UserContextHolder uch, UserRoleMapper urm, RoleMapper rm) {
         this.productMapper = pm; this.inventoryCheckMapper = ic;
         this.maintenanceCheckMapper = mc; this.salesAnalysisMapper = sa;
         this.newProductPlanMapper = np; this.promotionPlanMapper = pp;
+        this.userContextHolder = uch; this.userRoleMapper = urm; this.roleMapper = rm;
     }
 
     // ---- 通用 ----
@@ -47,10 +57,31 @@ public class ProductService {
 
     // ---- 商品敏感字段过滤 ----
 
-    /**
-     * 根据角色过滤敏感字段 costPrice/grossMarginRate
-     * 仅店长/区域经理/总部/管理员可见
-     */
+    /** 获取当前用户角色码列表 */
+    private List<String> resolveUserRoles() {
+        Long userId = userContextHolder.getUserId();
+        if (userId == null) return Collections.emptyList();
+        try {
+            List<Long> roleIds = userRoleMapper.selectList(
+                    new LambdaQueryWrapper<UserRole>().eq(UserRole::getUserId, userId))
+                    .stream().map(UserRole::getRoleId).collect(Collectors.toList());
+            if (roleIds.isEmpty()) return Collections.emptyList();
+            return roleMapper.selectBatchIds(roleIds).stream()
+                    .map(Role::getRoleCode).collect(Collectors.toList());
+        } catch (Exception e) { return Collections.emptyList(); }
+    }
+
+    /** 列表（自动角色过滤） */
+    public List<Product> listFiltered() {
+        return listProductsWithRoleFilter(resolveUserRoles());
+    }
+
+    /** 详情（自动角色过滤） */
+    public Product getFiltered(Long id) {
+        return getProductWithRoleFilter(id, resolveUserRoles());
+    }
+
+    /** 列表（显式传角色） */
     public List<Product> listProductsWithRoleFilter(List<String> roles) {
         List<Product> list = productMapper.selectList(new LambdaQueryWrapper<Product>()
                 .orderByDesc(Product::getCreatedAt));
@@ -60,6 +91,7 @@ public class ProductService {
         return list;
     }
 
+    /** 详情（显式传角色） */
     public Product getProductWithRoleFilter(Long id, List<String> roles) {
         Product p = get(productMapper, id, "商品");
         if (!canViewSensitivePrice(roles)) { p.setCostPrice(null); p.setGrossMarginRate(null); }

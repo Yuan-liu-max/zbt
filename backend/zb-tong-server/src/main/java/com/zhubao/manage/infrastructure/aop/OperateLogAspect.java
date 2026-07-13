@@ -60,9 +60,8 @@ public class OperateLogAspect {
     @Async("aiExecutor")
     public void asyncLog(ProceedingJoinPoint joinPoint, Object result) {
         try {
-            // 保存 ThreadLocal 上下文，避免异步丢失 (P2-19 fix)
+            // UserContext 由 TaskDecorator 自动传播到 @Async 线程 (P2-19 fix v2)
             UserContext ctx = userContextHolder.get();
-            Long operatorId = ctx != null ? ctx.getUserId() : null;
 
             MethodSignature signature = (MethodSignature) joinPoint.getSignature();
             Method method = signature.getMethod();
@@ -71,7 +70,7 @@ public class OperateLogAspect {
             com.zhubao.manage.module.report.entity.OperateLog entity =
                     new com.zhubao.manage.module.report.entity.OperateLog();
 
-            entity.setOperatorId(operatorId);
+            entity.setOperatorId(ctx != null ? ctx.getUserId() : null);
 
             // 注解信息
             entity.setModule(annotation.module());

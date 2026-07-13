@@ -17,6 +17,7 @@ import java.util.Map;
 @Api(tags = "AI智能辅助")
 @RestController
 @RequestMapping("/ai")
+@org.springframework.security.access.prepost.PreAuthorize("isAuthenticated()")
 public class AIController {
 
     private final AIService aiService;

@@ -17,5 +17,7 @@ public class ProductMaintenanceCheck {
     private String issueDescription;
     private String photoUrls;
     private String handledResult;
+    @TableLogic private Integer isDeleted;
+
     @TableField(fill = FieldFill.INSERT) private LocalDateTime createdAt;
 }

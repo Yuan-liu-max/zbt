@@ -18,5 +18,7 @@ public class Notification {
     private LocalDateTime readAt;
     private String channel;
     private String sendStatus;
+    @TableLogic private Integer isDeleted;
+
     @TableField(fill = FieldFill.INSERT) private LocalDateTime createdAt;
 }

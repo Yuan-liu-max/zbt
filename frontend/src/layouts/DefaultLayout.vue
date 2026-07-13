@@ -189,14 +189,14 @@
 
             <!-- 通知图标 -->
             <a-badge :count="12" :offset="[-4, 4]">
-              <a-button type="text" shape="circle">
+              <a-button type="text" shape="circle" @click="router.push('/notify')">
                 <BellOutlined style="font-size: 18px" />
               </a-button>
             </a-badge>
 
             <!-- 邮件图标 -->
             <a-badge :count="5" :offset="[-4, 4]">
-              <a-button type="text" shape="circle">
+              <a-button type="text" shape="circle" @click="router.push('/message')">
                 <MailOutlined style="font-size: 18px" />
               </a-button>
             </a-badge>
@@ -207,11 +207,11 @@
                 <a-avatar :size="32" style="background-color: #c8a44d">
                   <template #icon><UserOutlined /></template>
                 </a-avatar>
-                <span v-if="!isSmallScreen" class="header-username">管理员</span>
+                <span v-if="!isSmallScreen" class="header-username">{{ userInfo.username }}</span>
                 <DownOutlined v-if="!isSmallScreen" style="font-size: 12px; margin-left: 4px" />
               </div>
               <template #overlay>
-                <a-menu>
+                <a-menu @click="handleUserMenuClick">
                   <a-menu-item key="profile">
                     <UserOutlined /> 个人中心
                   </a-menu-item>
@@ -251,6 +251,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted, type Component as VueComponent } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
+import { message } from 'ant-design-vue'
 import { menuRoutes } from '@/router'
 import {
   HomeOutlined,
@@ -290,6 +291,31 @@ const openKeys = ref<string[]>([])
 
 const router = useRouter()
 const route = useRoute()
+
+/* ---------- 用户信息 ---------- */
+const userInfo = ref({ username: '管理员', role: '超级管理员' })
+
+const loadUserInfo = () => {
+  try {
+    const stored = localStorage.getItem('userInfo')
+    if (stored) {
+      userInfo.value = JSON.parse(stored)
+    }
+  } catch {}
+}
+
+const handleUserMenuClick = ({ key }: { key: string }) => {
+  if (key === 'logout') {
+    localStorage.removeItem('token')
+    localStorage.removeItem('userInfo')
+    message.success('已退出登录')
+    router.push('/login')
+  } else if (key === 'profile') {
+    router.push('/profile')
+  } else if (key === 'settings') {
+    router.push('/settings')
+  }
+}
 
 /* ---------- 菜单数据（过滤隐藏项） ---------- */
 const menuList = computed(() =>
@@ -381,6 +407,7 @@ const checkScreen = () => {
 
 onMounted(() => {
   checkScreen()
+  loadUserInfo()
   window.addEventListener('resize', checkScreen)
 })
 

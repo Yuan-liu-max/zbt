@@ -17,7 +17,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import java.sql.Connection;
-import java.util.Collections;
 import java.util.List;
 import java.util.Properties;
 import java.util.stream.Collectors;
@@ -61,9 +60,9 @@ public class DataScopePlugin implements Interceptor {
             return invocation.proceed();
         }
 
-        // 从数据库查询真实的 data_scope 级别
+        // 从数据库查询用户角色 → data_scope 级别
         String dataScopeLevel = getUserDataScopeLevel(ctx.getUserId());
-        if (dataScopeLevel == null || "ALL".equals(dataScopeLevel)) {
+        if ("ALL".equals(dataScopeLevel)) {
             return invocation.proceed();
         }
 
@@ -89,10 +88,13 @@ public class DataScopePlugin implements Interceptor {
                             .eq(UserRole::getUserId, userId))
                     .stream().map(UserRole::getRoleId).collect(Collectors.toList());
 
-            if (roleIds.isEmpty()) return null;
+            // 无角色 → 默认 ALL（不过滤）
+            if (roleIds.isEmpty()) return "ALL";
 
             // sys_role → 获取角色的 data_scope（取最大权限范围）
             List<Role> roles = roleMapper.selectBatchIds(roleIds);
+            if (roles.isEmpty()) return "ALL";
+
             // 权限优先级: ALL > REGION > STORE > SELF > CUSTOM
             for (Role role : roles) {
                 if ("ALL".equals(role.getDataScope())) return "ALL";
@@ -106,10 +108,11 @@ public class DataScopePlugin implements Interceptor {
             for (Role role : roles) {
                 if ("SELF".equals(role.getDataScope())) return "SELF";
             }
+            // 有角色但 data_scope 为 CUSTOM → 走自定义范围
             return "CUSTOM";
         } catch (Exception e) {
-            log.warn("数据权限查询失败，默认不过滤: {}", e.getMessage());
-            return null;
+            log.warn("数据权限查询失败，默认 ALL: {}", e.getMessage());
+            return "ALL";
         }
     }
 

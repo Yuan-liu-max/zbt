@@ -37,6 +37,8 @@ public class TaskInstance {
     private BigDecimal finalScore;
 
     @TableField(fill = FieldFill.INSERT)
+    @TableLogic private Integer isDeleted;
+
     private LocalDateTime createdAt;
 
     @TableField(fill = FieldFill.INSERT_UPDATE)

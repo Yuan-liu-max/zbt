@@ -24,7 +24,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.stream.Collectors;
 
 /**
  * 任务提交服务 —— 状态机驱动 + 审核人自动分配
@@ -95,29 +94,57 @@ public class TaskSubmitService {
     /**
      * 根据模板配置的审核角色自动分配审核人
      *
-     * 逻辑：
-     *   导购(store_id) → 店长（同门店 ROLE_MANAGER）
-     *   店长(store_id) → 区域经理（同区域 ROLE_REGIONAL）
-     *   其他          → 根据 defaultAuditorRole 查找同区域/同门店用户
+     * ROLE_STORE_MANAGER  → task.storeId 对应门店的店长 (store_manager_id)
+     * ROLE_REGIONAL_MANAGER → task.storeId 所属区域的区域经理
+     * 其他角色码           → 查 sys_user_role 中持有该角色的第一个用户
+     * 无匹配              → 返回 null（管理员手动分配）
      */
     private Long resolveAuditor(TaskInstance task, TaskTemplate template) {
         String auditorRole = template.getDefaultAuditorRole();
-        if (auditorRole == null) return null;
+        if (auditorRole == null || task.getStoreId() == null) return null;
 
-        // 1. 查执行人信息
-        User assignee = userMapper.selectById(task.getAssigneeId());
-        if (assignee == null) return findFirstByRole(auditorRole);
+        Store store = storeMapper.selectById(task.getStoreId());
+        if (store == null) return null;
 
-        // 2. 执行人是导购 → 找同门店店长；执行人是店长 → 找同区域经理
-        if (assignee.getStoreId() != null) {
-            Store store = storeMapper.selectById(assignee.getStoreId());
-            if (store != null && store.getStoreManagerId() != null) {
-                return store.getStoreManagerId();
-            }
+        // 1. 店长审核 → 直接取门店的 store_manager_id
+        if ("ROLE_MANAGER".equals(auditorRole)) {
+            return store.getStoreManagerId();
         }
 
-        // 3. 兜底：查找具有 defaultAuditorRole 角色的第一个用户
+        // 2. 区域经理审核 → 查同区域下持有 ROLE_REGIONAL 角色的用户
+        if ("ROLE_REGIONAL".equals(auditorRole)) {
+            return findRegionalManager(store.getRegionId());
+        }
+
+        // 3. 其他角色 → 查持有该角色的任意用户
         return findFirstByRole(auditorRole);
+    }
+
+    /**
+     * 查找指定区域的区域经理：sys_user.region_id = ? 且角色包含 ROLE_REGIONAL
+     */
+    private Long findRegionalManager(Long regionId) {
+        if (regionId == null) return null;
+        try {
+            com.zhubao.manage.module.role.entity.Role regionalRole = roleMapper.selectOne(
+                    new LambdaQueryWrapper<com.zhubao.manage.module.role.entity.Role>()
+                            .eq(com.zhubao.manage.module.role.entity.Role::getRoleCode, "ROLE_REGIONAL"));
+            if (regionalRole == null) return null;
+
+            List<UserRole> urList = userRoleMapper.selectList(
+                    new LambdaQueryWrapper<UserRole>().eq(UserRole::getRoleId, regionalRole.getId()));
+            List<Long> candidateIds = urList.stream().map(UserRole::getUserId).collect(java.util.stream.Collectors.toList());
+            if (candidateIds.isEmpty()) return null;
+
+            // 在这些候选人中找 region_id 匹配的
+            List<User> users = userMapper.selectBatchIds(candidateIds);
+            return users.stream()
+                    .filter(u -> regionId.equals(u.getRegionId()))
+                    .map(User::getId)
+                    .findFirst().orElse(null);
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     private Long findFirstByRole(String roleCode) {
@@ -128,9 +155,8 @@ public class TaskSubmitService {
             if (role == null) return null;
             List<UserRole> urList = userRoleMapper.selectList(
                     new LambdaQueryWrapper<UserRole>().eq(UserRole::getRoleId, role.getId()));
-            if (!urList.isEmpty()) return urList.get(0).getUserId();
-        } catch (Exception ignored) {}
-        return null;
+            return urList.isEmpty() ? null : urList.get(0).getUserId();
+        } catch (Exception ignored) { return null; }
     }
 
     public TaskSubmission getLatestSubmission(Long taskId) {

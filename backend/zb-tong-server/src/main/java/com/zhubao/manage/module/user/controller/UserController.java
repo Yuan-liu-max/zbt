@@ -17,6 +17,7 @@ import javax.validation.Valid;
 @Api(tags = "用户管理")
 @RestController
 @RequestMapping("/users")
+@org.springframework.security.access.prepost.PreAuthorize("hasRole('ADMIN')")
 public class UserController {
 
     private final UserService userService;

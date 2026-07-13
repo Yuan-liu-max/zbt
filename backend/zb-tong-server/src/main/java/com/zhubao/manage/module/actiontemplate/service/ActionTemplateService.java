@@ -30,8 +30,6 @@ public class ActionTemplateService {
     private final StoreMapper storeMapper;
     private final UserContextHolder userContextHolder;
 
-    private static final java.util.concurrent.atomic.AtomicInteger taskNoSeq = new java.util.concurrent.atomic.AtomicInteger(0);
-
     public ActionTemplateService(ActionTemplateMapper actionTemplateMapper,
                                  TaskTemplateMapper taskTemplateMapper,
                                  TaskInstanceMapper taskInstanceMapper,
@@ -149,7 +147,6 @@ public class ActionTemplateService {
         Store store = storeMapper.selectById(storeId);
 
         TaskInstance instance = new TaskInstance();
-        instance.setTaskNo(generateTaskNo());
         instance.setTemplateId(template.getId());
         instance.setTaskTitle(template.getTemplateName());
         instance.setDimension(template.getDimension());
@@ -164,12 +161,11 @@ public class ActionTemplateService {
         instance.setIsOverdue(0);
         instance.setOverdueMinutes(0);
         taskInstanceMapper.insert(instance);
-        return instance;
-    }
-
-    private String generateTaskNo() {
+        // 基于 DB 自增 ID 生成任务编号，多实例安全
         String date = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
-        return "TK" + date + String.format("%06d", taskNoSeq.incrementAndGet() % 1000000);
+        instance.setTaskNo("TK" + date + String.format("%06d", instance.getId() % 1000000));
+        taskInstanceMapper.updateById(instance);
+        return instance;
     }
 
     private LocalDateTime calcDueTime(String dueTimeRule) {

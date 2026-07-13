@@ -1,8 +1,17 @@
 package com.zhubao.manage.scheduler;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.zhubao.manage.module.human.entity.EmployeeAssessment;
+import com.zhubao.manage.module.human.mapper.EmployeeAssessmentMapper;
+
 import com.zhubao.manage.module.organization.entity.Store;
 import com.zhubao.manage.module.organization.mapper.StoreMapper;
+import com.zhubao.manage.module.product.entity.ProductInventoryCheck;
+import com.zhubao.manage.module.product.mapper.ProductInventoryCheckMapper;
+import com.zhubao.manage.module.report.entity.StoreMonthlyScore;
+import com.zhubao.manage.module.report.mapper.StoreMonthlyScoreMapper;
+import com.zhubao.manage.module.scene.entity.SceneHealthInspection;
+import com.zhubao.manage.module.scene.mapper.SceneHealthInspectionMapper;
 import com.zhubao.manage.module.task.entity.TaskAudit;
 import com.zhubao.manage.module.task.entity.TaskInstance;
 import com.zhubao.manage.module.task.mapper.TaskAuditMapper;
@@ -24,13 +33,11 @@ import java.util.List;
  *
  * 调度配置: cron: 0 0 5 1 * ?
  *
- * 计算维度:
- *   人效分(35%) → TODO: 汇总 employee_monthly_review 数据
- *   货品分(30%) → TODO: 汇总 product_inventory_check / product_sales_analysis
- *   场景分(25%) → TODO: 汇总 scene_* 检查表得分
- *   纪律分(10%) → 超时次数 + 驳回次数
- *
- * 结果写入 store_monthly_score
+ * 评分公式 (100分制):
+ *   人效分(35) = 本月员工考核平均分 / 100 * 35
+ *   货品分(30) = (1 - 盘点异常率) * 30
+ *   场景分(25) = (1 - 卫生需整改率) * 25
+ *   纪律分(10) = 10 - 超时×0.5 - 驳回×0.5，最低0
  */
 @Component
 public class StoreScoreCalcJob {
@@ -40,12 +47,24 @@ public class StoreScoreCalcJob {
     private final StoreMapper storeMapper;
     private final TaskInstanceMapper taskInstanceMapper;
     private final TaskAuditMapper taskAuditMapper;
+    private final EmployeeAssessmentMapper assessmentMapper;
+    private final ProductInventoryCheckMapper inventoryCheckMapper;
+    private final SceneHealthInspectionMapper healthMapper;
+    private final StoreMonthlyScoreMapper scoreMapper;
 
     public StoreScoreCalcJob(StoreMapper storeMapper, TaskInstanceMapper taskInstanceMapper,
-                             TaskAuditMapper taskAuditMapper) {
+                             TaskAuditMapper taskAuditMapper,
+                             EmployeeAssessmentMapper assessmentMapper,
+                             ProductInventoryCheckMapper inventoryCheckMapper,
+                             SceneHealthInspectionMapper healthMapper,
+                             StoreMonthlyScoreMapper scoreMapper) {
         this.storeMapper = storeMapper;
         this.taskInstanceMapper = taskInstanceMapper;
         this.taskAuditMapper = taskAuditMapper;
+        this.assessmentMapper = assessmentMapper;
+        this.inventoryCheckMapper = inventoryCheckMapper;
+        this.healthMapper = healthMapper;
+        this.scoreMapper = scoreMapper;
     }
 
     @XxlJob("storeScoreCalcHandler")
@@ -62,6 +81,8 @@ public class StoreScoreCalcJob {
                 calcStoreScore(store.getId(), scoreMonth);
                 count++;
             }
+            // 计算排名
+            updateRankings(scoreMonth);
             String msg = "门店评分完成，已计算 " + count + " 家门店 (" + scoreMonth + ")";
             log.info(msg);
             XxlJobHelper.handleSuccess(msg);
@@ -72,43 +93,169 @@ public class StoreScoreCalcJob {
     }
 
     /**
-     * 计算单个门店月度评分
-     *
-     * TODO: 后续由 ScoreCalcService 承接完整评分引擎逻辑
+     * 计算单个门店月度评分 — 全部使用 BigDecimal
      */
     private void calcStoreScore(Long storeId, String scoreMonth) {
-        // ---- 纪律分（10%）基于任务超时和驳回 ----
-        long overdueCount = taskInstanceMapper.selectCount(
-                new LambdaQueryWrapper<TaskInstance>()
-                        .eq(TaskInstance::getStoreId, storeId)
-                        .eq(TaskInstance::getIsOverdue, 1)
-                        .ge(TaskInstance::getCreatedAt, scoreMonth + "-01")
-                        .lt(TaskInstance::getCreatedAt, nextMonth(scoreMonth) + "-01"));
+        String nextMonth = nextMonth(scoreMonth);
 
-        // 驳回次数 = 查询 task_audit 表 audit_result = 'REJECTED'
-        long rejectedCount = taskAuditMapper.selectCount(
-                new LambdaQueryWrapper<TaskAudit>()
-                        .eq(TaskAudit::getAuditResult, "REJECTED")
-                        .ge(TaskAudit::getAuditedAt, scoreMonth + "-01")
-                        .lt(TaskAudit::getAuditedAt, nextMonth(scoreMonth) + "-01")
-                        .apply("task_id IN (SELECT id FROM task_instance WHERE store_id = {0})", storeId));
+        // ---- 纪律分 (10分) ----
+        BigDecimal disciplineScore = calcDisciplineScore(storeId, scoreMonth, nextMonth);
 
-        // 纪律分：满分10分，每次超时-0.5，每次驳回-0.5，最低0分
-        BigDecimal disciplineScore = BigDecimal.valueOf(Math.max(0, 10 - overdueCount * 0.5 - rejectedCount * 0.5));
+        // ---- 人效分 (35分) = avg(total_score) / 100 * 35 ----
+        BigDecimal humanScore = calcHumanScore(storeId, scoreMonth, nextMonth);
 
-        // ---- 人效分(35%) / 货品分(30%) / 场景分(25%) 暂用默认值 ----
-        // TODO: 接入 HumanService / ProductService / SceneService 的汇总数据
-        BigDecimal humanScore = BigDecimal.valueOf(35);
-        BigDecimal productScore = BigDecimal.valueOf(30);
-        BigDecimal sceneScore = BigDecimal.valueOf(25);
+        // ---- 货品分 (30分) = (1 - abnormal/total) * 30 ----
+        BigDecimal productScore = calcProductScore(storeId, scoreMonth, nextMonth);
+
+        // ---- 场景分 (25分) = (1 - rectification/total) * 25 ----
+        BigDecimal sceneScore = calcSceneScore(storeId, scoreMonth, nextMonth);
 
         BigDecimal totalScore = humanScore.add(productScore).add(sceneScore).add(disciplineScore)
                 .setScale(2, RoundingMode.HALF_UP);
 
-        log.debug("门店[{}]评分: 总分={}, 人效={}, 货品={}, 场景={}, 纪律={}",
-                storeId, totalScore, humanScore, productScore, sceneScore, disciplineScore);
+        // ---- 持久化到 store_monthly_score ----
+        StoreMonthlyScore score = new StoreMonthlyScore();
+        score.setStoreId(storeId);
+        score.setScoreMonth(scoreMonth);
+        score.setTotalScore(totalScore);
+        score.setHumanScore(humanScore);
+        score.setProductScore(productScore);
+        score.setSceneScore(sceneScore);
+        score.setDisciplineScore(disciplineScore);
+        score.setOverdueCount(calcOverdueCount(storeId, scoreMonth, nextMonth));
+        score.setRejectedCount(calcRejectedCount(storeId, scoreMonth, nextMonth));
+        scoreMapper.insert(score);
 
-        // TODO: 写入 store_monthly_score 表（开发 report 模块时接入 StoreMonthlyScoreMapper）
+        log.debug("门店[{}]评分入库: 总分={}, 人效={}, 货品={}, 场景={}, 纪律={}",
+                storeId, totalScore, humanScore, productScore, sceneScore, disciplineScore);
+    }
+
+    // ==================== 四个维度 ====================
+
+    /** 纪律分: 10 - 超时×0.5 - 驳回×0.5, 最低0 */
+    private BigDecimal calcDisciplineScore(Long storeId, String month, String nextMonth) {
+        long overdueCount = taskInstanceMapper.selectCount(
+                new LambdaQueryWrapper<TaskInstance>()
+                        .eq(TaskInstance::getStoreId, storeId)
+                        .eq(TaskInstance::getIsOverdue, 1)
+                        .ge(TaskInstance::getCreatedAt, month + "-01")
+                        .lt(TaskInstance::getCreatedAt, nextMonth + "-01"));
+
+        long rejectedCount = taskAuditMapper.selectCount(
+                new LambdaQueryWrapper<TaskAudit>()
+                        .eq(TaskAudit::getAuditResult, "REJECTED")
+                        .ge(TaskAudit::getAuditedAt, month + "-01")
+                        .lt(TaskAudit::getAuditedAt, nextMonth + "-01")
+                        .apply("task_id IN (SELECT id FROM task_instance WHERE store_id = {0})", storeId));
+
+        BigDecimal deduction = BigDecimal.valueOf(overdueCount)
+                .add(BigDecimal.valueOf(rejectedCount))
+                .multiply(BigDecimal.valueOf(0.5));
+        return BigDecimal.TEN.subtract(deduction).max(BigDecimal.ZERO).setScale(2, RoundingMode.HALF_UP);
+    }
+
+    /** 人效分: 本月员工考核平均分 / 100 * 35 */
+    private BigDecimal calcHumanScore(Long storeId, String month, String nextMonth) {
+        try {
+            List<EmployeeAssessment> assessments = assessmentMapper.selectList(
+                    new LambdaQueryWrapper<EmployeeAssessment>()
+                            .ge(EmployeeAssessment::getCreatedAt, month + "-01")
+                            .lt(EmployeeAssessment::getCreatedAt, nextMonth + "-01"));
+            if (assessments.isEmpty()) return BigDecimal.ZERO;
+
+            BigDecimal avgScore = assessments.stream()
+                    .map(a -> a.getTotalScore() != null ? a.getTotalScore() : BigDecimal.ZERO)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add)
+                    .divide(BigDecimal.valueOf(assessments.size()), 4, RoundingMode.HALF_UP);
+            return avgScore.divide(BigDecimal.valueOf(100), 4, RoundingMode.HALF_UP)
+                    .multiply(BigDecimal.valueOf(35)).setScale(2, RoundingMode.HALF_UP);
+        } catch (Exception e) {
+            log.warn("人效分查询异常 storeId={}: {}", storeId, e.getMessage());
+            return BigDecimal.ZERO;
+        }
+    }
+
+    /** 货品分: (1 - 盘点异常率) * 30 */
+    private BigDecimal calcProductScore(Long storeId, String month, String nextMonth) {
+        try {
+            List<ProductInventoryCheck> checks = inventoryCheckMapper.selectList(
+                    new LambdaQueryWrapper<ProductInventoryCheck>()
+                            .eq(ProductInventoryCheck::getStoreId, storeId)
+                            .ge(ProductInventoryCheck::getCheckDate, month + "-01")
+                            .lt(ProductInventoryCheck::getCheckDate, nextMonth + "-01"));
+            if (checks.isEmpty()) return BigDecimal.ZERO;
+
+            long totalChecked = checks.stream()
+                    .mapToLong(c -> c.getTotalCheckedCount() != null ? c.getTotalCheckedCount() : 0).sum();
+            long totalAbnormal = checks.stream()
+                    .mapToLong(c -> c.getAbnormalCount() != null ? c.getAbnormalCount() : 0).sum();
+
+            if (totalChecked == 0) return BigDecimal.ZERO;
+            BigDecimal abnormalRate = BigDecimal.valueOf(totalAbnormal)
+                    .divide(BigDecimal.valueOf(totalChecked), 4, RoundingMode.HALF_UP);
+            return BigDecimal.ONE.subtract(abnormalRate).max(BigDecimal.ZERO)
+                    .multiply(BigDecimal.valueOf(30)).setScale(2, RoundingMode.HALF_UP);
+        } catch (Exception e) {
+            log.warn("货品分查询异常 storeId={}: {}", storeId, e.getMessage());
+            return BigDecimal.ZERO;
+        }
+    }
+
+    /** 场景分: (1 - 卫生需整改率) * 25 */
+    private BigDecimal calcSceneScore(Long storeId, String month, String nextMonth) {
+        try {
+            List<SceneHealthInspection> inspections = healthMapper.selectList(
+                    new LambdaQueryWrapper<SceneHealthInspection>()
+                            .eq(SceneHealthInspection::getStoreId, storeId)
+                            .ge(SceneHealthInspection::getInspectionDate, month + "-01")
+                            .lt(SceneHealthInspection::getInspectionDate, nextMonth + "-01"));
+            if (inspections.isEmpty()) return BigDecimal.ZERO;
+
+            long total = inspections.size();
+            long needRectification = inspections.stream()
+                    .filter(h -> h.getRectificationRequired() != null && h.getRectificationRequired() == 1).count();
+
+            BigDecimal rectRate = BigDecimal.valueOf(needRectification)
+                    .divide(BigDecimal.valueOf(total), 4, RoundingMode.HALF_UP);
+            return BigDecimal.ONE.subtract(rectRate).max(BigDecimal.ZERO)
+                    .multiply(BigDecimal.valueOf(25)).setScale(2, RoundingMode.HALF_UP);
+        } catch (Exception e) {
+            log.warn("场景分查询异常 storeId={}: {}", storeId, e.getMessage());
+            return BigDecimal.ZERO;
+        }
+    }
+
+    // ==================== 辅助 ====================
+
+    private int calcOverdueCount(Long storeId, String month, String nextMonth) {
+        return Math.toIntExact(taskInstanceMapper.selectCount(
+                new LambdaQueryWrapper<TaskInstance>()
+                        .eq(TaskInstance::getStoreId, storeId)
+                        .eq(TaskInstance::getIsOverdue, 1)
+                        .ge(TaskInstance::getCreatedAt, month + "-01")
+                        .lt(TaskInstance::getCreatedAt, nextMonth + "-01")));
+    }
+
+    private int calcRejectedCount(Long storeId, String month, String nextMonth) {
+        return Math.toIntExact(taskAuditMapper.selectCount(
+                new LambdaQueryWrapper<TaskAudit>()
+                        .eq(TaskAudit::getAuditResult, "REJECTED")
+                        .ge(TaskAudit::getAuditedAt, month + "-01")
+                        .lt(TaskAudit::getAuditedAt, nextMonth + "-01")
+                        .apply("task_id IN (SELECT id FROM task_instance WHERE store_id = {0})", storeId)));
+    }
+
+    /** 更新当月所有门店的排名 */
+    private void updateRankings(String month) {
+        List<StoreMonthlyScore> scores = scoreMapper.selectList(
+                new LambdaQueryWrapper<StoreMonthlyScore>()
+                        .eq(StoreMonthlyScore::getScoreMonth, month)
+                        .orderByDesc(StoreMonthlyScore::getTotalScore));
+        int rank = 1;
+        for (StoreMonthlyScore s : scores) {
+            s.setRanking(rank++);
+            scoreMapper.updateById(s);
+        }
     }
 
     private String nextMonth(String ym) {

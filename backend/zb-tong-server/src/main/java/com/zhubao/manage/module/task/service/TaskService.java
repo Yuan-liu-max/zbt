@@ -17,7 +17,6 @@ import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.concurrent.atomic.AtomicInteger;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -29,8 +28,6 @@ public class TaskService {
     private final TaskInstanceMapper taskInstanceMapper;
     private final TaskTemplateMapper taskTemplateMapper;
     private final StoreMapper storeMapper;
-
-    private static final AtomicInteger taskNoSeq = new AtomicInteger(0);
 
     public TaskService(TaskInstanceMapper taskInstanceMapper,
                        TaskTemplateMapper taskTemplateMapper,
@@ -57,14 +54,13 @@ public class TaskService {
             Store store = storeMapper.selectById(storeId);
 
             TaskInstance instance = new TaskInstance();
-            instance.setTaskNo(generateTaskNo());
             instance.setTemplateId(templateId);
             instance.setTaskTitle(template.getTemplateName());
             instance.setDimension(template.getDimension());
             instance.setCategory(template.getCategory());
             instance.setStoreId(storeId);
             instance.setAssigneeId(store != null ? store.getStoreManagerId() : null);
-            instance.setAuditorId(null); // 由审核角色动态确定
+            instance.setAuditorId(null);
             instance.setStartTime(LocalDateTime.now());
             instance.setDueTime(calcDueTime(template.getDueTimeRule()));
             instance.setStatus("PENDING");
@@ -73,6 +69,10 @@ public class TaskService {
             instance.setIsOverdue(0);
             instance.setOverdueMinutes(0);
             taskInstanceMapper.insert(instance);
+            // 基于 DB 自增 ID 生成任务编号，多实例安全
+            String date = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
+            instance.setTaskNo("TK" + date + String.format("%06d", instance.getId() % 1000000));
+            taskInstanceMapper.updateById(instance);
             instances.add(instance);
         }
         return instances;
@@ -188,11 +188,6 @@ public class TaskService {
         TaskInstance t = taskInstanceMapper.selectById(id);
         if (t == null) throw new BusinessException(ErrorCode.TASK_NOT_FOUND);
         return t;
-    }
-
-    private String generateTaskNo() {
-        String date = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
-        return "TK" + date + String.format("%06d", taskNoSeq.incrementAndGet() % 1000000);
     }
 
     private LocalDateTime calcDueTime(String dueTimeRule) {

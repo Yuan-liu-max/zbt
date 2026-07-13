@@ -17,5 +17,7 @@ public class ProductInventoryCheck {
     private String abnormalItems;
     private String photos;
     private String remark;
+    @TableLogic private Integer isDeleted;
+
     @TableField(fill = FieldFill.INSERT) private LocalDateTime createdAt;
 }

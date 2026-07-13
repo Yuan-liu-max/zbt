@@ -21,6 +21,8 @@ public class NewProductPlan {
     private String promotionScript;
     private String attachmentUrls;
     private String status;
+    @TableLogic private Integer isDeleted;
+
     @TableField(fill = FieldFill.INSERT) private LocalDateTime createdAt;
     @TableField(fill = FieldFill.INSERT_UPDATE) private LocalDateTime updatedAt;
 }

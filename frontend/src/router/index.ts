@@ -25,6 +25,12 @@ export const menuRoutes: RouteRecordRaw[] = [
         component: lazy('dashboard/DashboardView'),
         meta: { title: '首页', icon: 'HomeOutlined', affix: true },
       },
+      {
+        path: 'dashboard/settings',
+        name: 'DashboardSettings',
+        component: lazy('dashboard/DashboardSettings'),
+        meta: { title: '自定义设置', hidden: true },
+      },
 
       /* ---- 商品管理 ---- */
       {
@@ -194,6 +200,30 @@ export const menuRoutes: RouteRecordRaw[] = [
         component: lazy('ai/AICenter'),
         meta: { title: 'AI智能辅助', icon: 'RobotOutlined' },
       },
+      {
+        path: 'ai/chat',
+        name: 'AiChat',
+        component: lazy('ai/AiChat'),
+        meta: { title: '智能问答', hidden: true },
+      },
+      {
+        path: 'ai/doc',
+        name: 'AiDoc',
+        component: lazy('ai/AiDoc'),
+        meta: { title: '文档生成', hidden: true },
+      },
+      {
+        path: 'ai/suggest',
+        name: 'AiSuggest',
+        component: lazy('ai/AiSuggest'),
+        meta: { title: '智能建议', hidden: true },
+      },
+      {
+        path: 'ai/analysis',
+        name: 'AiAnalysis',
+        component: lazy('ai/AiAnalysis'),
+        meta: { title: '数据分析', hidden: true },
+      },
 
       /* ---- 系统管理 ---- */
       {
@@ -228,6 +258,46 @@ export const menuRoutes: RouteRecordRaw[] = [
     meta: { title: '登录', hidden: true },
   },
 
+  /* ---- 注册 ---- */
+  {
+    path: '/register',
+    name: 'Register',
+    component: lazy('login/RegisterView'),
+    meta: { title: '注册', hidden: true },
+  },
+
+  /* ---- 提醒 ---- */
+  {
+    path: '/notify',
+    name: 'ProfileNotify',
+    component: lazy('profile/ProfileNotify'),
+    meta: { title: '提醒', hidden: true },
+  },
+
+  /* ---- 信息 ---- */
+  {
+    path: '/message',
+    name: 'ProfileMessage',
+    component: lazy('profile/ProfileMessage'),
+    meta: { title: '信息', hidden: true },
+  },
+
+  /* ---- 个人中心 ---- */
+  {
+    path: '/profile',
+    name: 'ProfileCenter',
+    component: lazy('profile/ProfileCenter'),
+    meta: { title: '个人中心', hidden: true },
+  },
+
+  /* ---- 个人设置 ---- */
+  {
+    path: '/settings',
+    name: 'ProfileSetting',
+    component: lazy('profile/ProfileSetting'),
+    meta: { title: '个人设置', hidden: true },
+  },
+
   /* ---- 404 ---- */
   {
     path: '/:pathMatch(.*)*',
@@ -248,9 +318,15 @@ router.beforeEach((to, _from, next) => {
   const title = (to.meta.title as string) || '珠宝通'
   document.title = `${title} - 珠宝通珠宝行业管理系统`
 
-  // TODO: 登录鉴权 —— token 不存在时跳 /login
-  // const token = localStorage.getItem('token')
-  // if (!token && to.path !== '/login') return next('/login')
+  // 登录鉴权 —— token 不存在时跳 /login
+  const token = localStorage.getItem('token')
+  if (!token && to.path !== '/login' && to.path !== '/register' && !to.path.startsWith('/profile') && !to.path.startsWith('/settings') && !to.path.startsWith('/notify') && !to.path.startsWith('/message')) {
+    return next('/login')
+  }
+  // 已登录访问登录页时跳转到首页
+  if (token && (to.path === '/login' || to.path === '/register')) {
+    return next('/dashboard')
+  }
 
   next()
 })

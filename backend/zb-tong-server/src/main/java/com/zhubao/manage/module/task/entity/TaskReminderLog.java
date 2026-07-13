@@ -20,5 +20,7 @@ public class TaskReminderLog {
     private LocalDateTime sentAt;
 
     @TableField(fill = FieldFill.INSERT)
+    @TableLogic private Integer isDeleted;
+
     private LocalDateTime createdAt;
 }

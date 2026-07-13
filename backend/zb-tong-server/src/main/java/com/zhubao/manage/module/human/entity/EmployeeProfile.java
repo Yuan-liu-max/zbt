@@ -15,6 +15,8 @@ public class EmployeeProfile {
     private LocalDate entryDate;
     private String level;
     private String status;
+    @TableLogic private Integer isDeleted;
+
     @TableField(fill = FieldFill.INSERT) private LocalDateTime createdAt;
     @TableField(fill = FieldFill.INSERT_UPDATE) private LocalDateTime updatedAt;
 }

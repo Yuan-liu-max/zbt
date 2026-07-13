@@ -19,5 +19,7 @@ public class AIResult {
     private String modelName;
     private String tokenUsage;
     private String status;
+    @TableLogic private Integer isDeleted;
+
     @TableField(fill = FieldFill.INSERT) private LocalDateTime createdAt;
 }

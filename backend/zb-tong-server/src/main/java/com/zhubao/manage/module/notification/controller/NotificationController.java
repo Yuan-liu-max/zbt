@@ -17,6 +17,7 @@ import java.util.Map;
 @Api(tags = "消息通知")
 @RestController
 @RequestMapping("/notifications")
+@org.springframework.security.access.prepost.PreAuthorize("isAuthenticated()")
 public class NotificationController {
 
     private final NotificationService notificationService;

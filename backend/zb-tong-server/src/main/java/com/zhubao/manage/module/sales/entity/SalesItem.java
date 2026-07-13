@@ -27,5 +27,7 @@ public class SalesItem {
     private String objection;
     private String closingReason;
     private String productPhotoUrls;
+    @TableLogic private Integer isDeleted;
+
     @TableField(fill = FieldFill.INSERT) private LocalDateTime createdAt;
 }

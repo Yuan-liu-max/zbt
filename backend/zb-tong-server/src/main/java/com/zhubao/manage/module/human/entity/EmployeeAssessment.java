@@ -19,5 +19,7 @@ public class EmployeeAssessment {
     private BigDecimal promotionScriptScore;
     private BigDecimal totalScore;
     private String improvementAdvice;
+    @TableLogic private Integer isDeleted;
+
     @TableField(fill = FieldFill.INSERT) private LocalDateTime createdAt;
 }

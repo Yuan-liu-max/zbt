@@ -22,5 +22,7 @@ public class TaskSubmission {
     private LocalDateTime submittedAt;
 
     @TableField(fill = FieldFill.INSERT)
+    @TableLogic private Integer isDeleted;
+
     private LocalDateTime createdAt;
 }

@@ -23,6 +23,8 @@ public class EmployeeMonthlyReview {
     private BigDecimal rewardAmount;
     private BigDecimal penaltyAmount;
     private String managerReview;
+    @TableLogic private Integer isDeleted;
+
     @TableField(fill = FieldFill.INSERT) private LocalDateTime createdAt;
     @TableField(fill = FieldFill.INSERT_UPDATE) private LocalDateTime updatedAt;
 }

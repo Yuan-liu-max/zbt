@@ -2,6 +2,8 @@ package com.zhubao.manage.module.task.dto;
 
 import com.zhubao.manage.common.dto.PageDTO;
 
+import javax.validation.constraints.Pattern;
+
 public class TaskQueryDTO extends PageDTO {
 
     private String status;
@@ -14,8 +16,8 @@ public class TaskQueryDTO extends PageDTO {
     private String priority;
     private String keyword;
     private Integer isOverdue;
-    private String startDate;
-    private String endDate;
+    @Pattern(regexp = "\\d{4}-\\d{2}-\\d{2}", message = "日期格式必须为yyyy-MM-dd") private String startDate;
+    @Pattern(regexp = "\\d{4}-\\d{2}-\\d{2}", message = "日期格式必须为yyyy-MM-dd") private String endDate;
 
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
