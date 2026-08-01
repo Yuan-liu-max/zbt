@@ -109,7 +109,7 @@ import {
   LineChartOutlined, UserOutlined, ShoppingOutlined, PercentageOutlined
 } from '@ant-design/icons-vue'
 import type { AiTool, RecentConversation, RecommendScenario } from '@/types/ai'
-import { mockTools, mockConversations, mockScenarios } from '@/api/mock/ai'
+import { mockTools, mockConversations, mockScenarios } from '@/api/ai'
 
 // 路由
 const router = useRouter()

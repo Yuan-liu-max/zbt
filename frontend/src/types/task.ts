@@ -1,82 +1,116 @@
 // 任务中心相关类型定义
 
-// 任务状态
-export type TaskStatus = 'pending' | 'in_progress' | 'completed' | 'overdue' | 'cancelled'
+// 任务维度
+export type TaskDimension = 'HUMAN' | 'PRODUCT' | 'SCENE' | 'COMPREHENSIVE'
 
-// 任务类型
-export type TaskType = 'review' | 'approval' | 'process' | 'general'
+// 任务状态（12种）
+export type TaskStatus = 'PENDING' | 'READY' | 'IN_PROGRESS' | 'SUBMITTED' | 'AUDITING' | 'APPROVED' | 'COMPLETED' | 'REJECTED' | 'RECTIFYING' | 'OVERDUE' | 'CANCELLED' | 'VOIDED'
 
-// 优先级
-export type TaskPriority = 'high' | 'medium' | 'low'
+// 任务优先级
+export type TaskPriority = 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT'
 
-// 审查状态
-export type ReviewStatus = 'pending' | 'approved' | 'rejected'
+// 任务来源
+export type TaskSourceType = 'CYCLE' | 'MANUAL' | 'HQ' | 'ABNORMAL' | 'HOLIDAY' | 'AI'
 
-// 任务信息
+// 审核结果
+export type AuditResult = 'APPROVED' | 'REJECTED' | 'RECTIFY'
+
+// 任务实例
 export interface TaskItem {
-  id: string
-  name: string              // 任务名称
-  type: TaskType            // 任务类型
-  priority: TaskPriority    // 优先级
-  assignee: string          // 负责人
-  participants: string[]    // 参与人
-  startTime: string         // 开始时间
-  endTime: string           // 截止时间
-  status: TaskStatus        // 状态
-  progress: number          // 进度
-  description?: string      // 描述
-  attachments?: string[]    // 附件
+  id: number
+  taskNo: string
+  templateId: number
+  taskTitle: string
+  dimension: TaskDimension
+  category: string
+  storeId: number
+  storeName: string
+  assigneeId: number
+  assigneeName: string
+  auditorId: number
+  auditorName: string
+  startTime: string
+  dueTime: string
+  completedTime?: string
+  status: TaskStatus
+  priority: TaskPriority
+  sourceType: TaskSourceType
+  isOverdue: boolean
+  overdueMinutes: number
+  qualityScore: number
+  aiScore: number
+  manualScore: number
+  finalScore: number
   createdAt: string
+}
+
+// 任务提交
+export interface TaskSubmission {
+  submissionId: number
+  taskId: number
+  textContent: string
+  formData: Record<string, any>
+  photoUrls: string[]
+  attachmentUrls: string[]
+  location?: { lat: number; lng: number }
+  submittedAt: string
+}
+
+// 任务审核
+export interface TaskAudit {
+  auditId: number
+  auditorName: string
+  auditResult: AuditResult
+  auditComment: string
+  score: number
+  auditedAt: string
 }
 
 // 任务模板
 export interface TaskTemplate {
-  id: string
-  name: string              // 模板名称
-  type: TaskType            // 模板类型
-  creator: string           // 创建人
-  createdAt: string         // 创建时间
-  updatedAt: string         // 更新时间
+  id: number
+  name: string
+  type: string
+  creator: string
+  createdAt: string
+  updatedAt: string
 }
 
 // 任务审查
 export interface TaskReviewItem {
-  id: string
-  name: string              // 任务名称
-  type: TaskType            // 任务类型
-  initiator: string         // 发起人
-  initiateTime: string      // 发起时间
-  currentNode: string       // 当前节点
-  status: ReviewStatus      // 状态
+  id: number
+  name: string
+  type: string
+  initiator: string
+  initiateTime: string
+  currentNode: string
+  status: string
 }
 
-// 任务查询参数
+// 查询参数
 export interface TaskQueryParams {
-  name?: string
-  type?: TaskType
-  assignee?: string
+  keyword?: string
+  dimension?: TaskDimension
   status?: TaskStatus
+  priority?: TaskPriority
+  sourceType?: TaskSourceType
   startDate?: string
   endDate?: string
   page: number
-  pageSize: number
+  size: number
 }
 
-// 模板查询参数
 export interface TemplateQueryParams {
   name?: string
-  type?: TaskType
+  type?: string
   page: number
-  pageSize: number
+  size: number
 }
 
-// 审查查询参数
 export interface ReviewQueryParams {
   name?: string
-  type?: TaskType
+  type?: string
   initiator?: string
-  startDate?: string
-  endDate?: string
   page: number
-  pageSize: number
+  size: number
 }

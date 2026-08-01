@@ -112,6 +112,13 @@
         </a-form-item>
       </a-form>
     </a-modal>
+    <a-modal v-model:open="detailVisible" title="详情" :footer="null" width="600px">
+      <a-descriptions :column="2" bordered size="small">
+        <a-descriptions-item v-for="(val, key) in detailRecord" :key="key" :label="String(key)" :span="typeof val === 'object' ? 2 : 1">
+          {{ typeof val === 'object' ? JSON.stringify(val) : val }}
+        </a-descriptions-item>
+      </a-descriptions>
+    </a-modal>
   </div>
 </template>
 
@@ -120,7 +127,7 @@ import { ref, reactive, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
 import { PlusOutlined, SearchOutlined } from '@ant-design/icons-vue'
 import type { PromotionItem, PromotionQueryParams, PromotionStatus, PromotionType } from '@/types/marketing'
-import { promotionApi, promotionStatusMap, promotionTypeMap } from '@/api/mock/marketing'
+import { promotionApi, promotionStatusMap, promotionTypeMap } from '@/api/marketing'
 
 const searchForm = reactive({
   name: '',
@@ -148,6 +155,9 @@ const columns = [
   { title: '创建时间', dataIndex: 'createdAt', key: 'createdAt', width: 160 },
   { title: '操作', key: 'action', width: 130, fixed: 'right' as const }
 ]
+
+const detailVisible = ref(false)
+const detailRecord = ref<any>(null)
 
 const modalVisible = ref(false)
 const modalLoading = ref(false)
@@ -182,7 +192,7 @@ const handleReset = () => {
 }
 const handleTableChange = (pag: any) => { pagination.current = pag.current; pagination.pageSize = pag.pageSize; loadData() }
 const handleAdd = () => { isEdit.value = false; resetForm(); modalVisible.value = true }
-const handleView = (record: PromotionItem) => { message.info(`查看 ${record.name} 详情`) }
+const handleView = (record: PromotionItem) => { detailRecord.value = record; detailVisible.value = true }
 const handleEdit = (record: PromotionItem) => {
   isEdit.value = true; formData.id = record.id; formData.name = record.name; formData.type = record.type
   formData.discountMethod = record.discountMethod; formData.scope = record.scope; modalVisible.value = true

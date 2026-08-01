@@ -163,15 +163,27 @@
         </div>
       </a-spin>
     </div>
+
+    <!-- 详情弹窗 -->
+    <a-modal v-model:open="detailVisible" title="退换货详情" :footer="null" width="600px">
+      <a-descriptions :column="2" bordered size="small">
+        <a-descriptions-item v-for="(val, key) in detailRecord" :key="key" :label="String(key)" :span="typeof val === 'object' ? 2 : 1">
+          {{ typeof val === 'object' ? JSON.stringify(val) : val }}
+        </a-descriptions-item>
+      </a-descriptions>
+    </a-modal>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, reactive, watch, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import { SearchOutlined } from '@ant-design/icons-vue'
 import type { ReturnRecord, ReturnQueryParams, ReturnStatus, ReturnType } from '@/types/order'
-import { returnApi, returnStatusMap } from '@/api/mock/order'
+import { returnApi, returnStatusMap } from '@/api/order'
+
+const router = useRouter()
 
 // 当前标签页
 const activeTab = ref<string>('all')
@@ -191,8 +203,15 @@ const loading = ref(false)
 const pagination = reactive({
   current: 1,
   pageSize: 10,
-  total: 0
+  total: 0,
+  showSizeChanger: true,
+  showQuickJumper: true,
+  showTotal: (total: number) => `共 ${total} 条`
 })
+
+// 详情弹窗
+const detailVisible = ref(false)
+const detailRecord = ref<any>(null)
 
 // 监听标签页切换
 watch(activeTab, () => {
@@ -266,17 +285,22 @@ const handleTabChange = () => {
 
 // 查看详情
 const handleViewDetail = (item: ReturnRecord) => {
-  message.info(`查看 ${item.returnCode} 详情`)
+  detailRecord.value = item
+  detailVisible.value = true
 }
 
 // 查看订单
 const handleViewOrder = (orderCode: string) => {
-  message.info(`查看订单 ${orderCode}`)
+  router.push(`/order/detail/${orderCode}`)
 }
 
 // 撤销申请
-const handleCancelApply = (item: ReturnRecord) => {
-  message.info(`撤销申请 ${item.returnCode}`)
+const handleCancelApply = async (item: ReturnRecord) => {
+  try {
+    await returnApi.cancel(item.id)
+    message.success('已撤销')
+    loadData()
+  } catch { message.error('撤销失败') }
 }
 
 onMounted(() => {

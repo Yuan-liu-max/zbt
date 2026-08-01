@@ -139,7 +139,7 @@ import { ref, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { message } from 'ant-design-vue'
 import type { OrderRecord, OrderStatus, PaymentStatus } from '@/types/order'
-import { orderApi, orderStatusMap } from '@/api/mock/order'
+import { orderApi, orderStatusMap } from '@/api/order'
 
 const router = useRouter()
 const route = useRoute()

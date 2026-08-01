@@ -90,7 +90,7 @@ import { ref, reactive, computed, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
 import { PlusOutlined } from '@ant-design/icons-vue'
 import type { GoodsCategory, GoodsStatus } from '@/types/goods'
-import { categoryApi } from '@/api/mock/goods'
+import { categoryApi } from '@/api/goods'
 
 // 分类数据（树形结构）
 const categoryTree = ref<GoodsCategory[]>([])

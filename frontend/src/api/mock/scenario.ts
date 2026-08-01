@@ -55,8 +55,8 @@ function createListApi<T extends { id: string }>(data: T[]) {
       let filtered = [...data]
       if (params.store) filtered = filtered.filter(item => (item as any).store === params.store)
       if (params.status) filtered = filtered.filter(item => (item as any).status === params.status)
-      const start = (params.page - 1) * params.pageSize
-      return { list: filtered.slice(start, start + params.pageSize), total: filtered.length, page: params.page, pageSize: params.pageSize }
+      const start = (params.page - 1) * params.size
+      return { list: filtered.slice(start, start + params.size), total: filtered.length, page: params.page, size: params.size }
     }
   }
 }

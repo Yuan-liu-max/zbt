@@ -57,7 +57,12 @@ import {
   CustomerServiceOutlined, ThunderboltOutlined, SettingOutlined
 } from '@ant-design/icons-vue'
 import type { NotificationItem } from '@/types/profile'
-import { notificationApi, notificationTypeMap } from '@/api/mock/profile'
+import { notificationApi } from '@/api/notification'
+
+const notificationTypeMap: Record<string, string> = {
+  TASK_START: '任务开始', TASK_DEADLINE: '任务截止', TASK_OVERDUE: '任务超时',
+  TASK_AUDIT: '任务审核', TASK_REJECTED: '已驳回', SYSTEM: '系统通知'
+}
 
 const activeTab = ref('all')
 const notifications = ref<NotificationItem[]>([])
@@ -73,12 +78,12 @@ const iconMap: Record<string, any> = {
   BellOutlined, ShoppingOutlined, CustomerServiceOutlined, ThunderboltOutlined, SettingOutlined
 }
 
-const getTypeIcon = (type: string) => iconMap[notificationTypeMap[type]?.icon] || BellOutlined
-const getTypeColor = (type: string) => notificationTypeMap[type]?.color || '#999'
+const getTypeIcon = () => BellOutlined
+const getTypeColor = () => '#1890ff'
 
 const loadData = async () => {
   try {
-    const res = await notificationApi.getList({ tab: activeTab.value, page: currentPage.value, pageSize: pageSize.value })
+    const res = await notificationApi.getList({ tab: activeTab.value, page: currentPage.value, size: pageSize.value })
     notifications.value = res.list
     total.value = res.total
   } catch { message.error('加载失败') }

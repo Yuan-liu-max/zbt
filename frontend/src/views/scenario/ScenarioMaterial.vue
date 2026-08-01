@@ -89,6 +89,13 @@
         </template>
       </a-table>
     </div>
+    <a-modal v-model:open="detailVisible" title="详情" :footer="null" width="600px">
+      <a-descriptions :column="2" bordered size="small">
+        <a-descriptions-item v-for="(val, key) in detailRecord" :key="key" :label="String(key)" :span="typeof val === 'object' ? 2 : 1">
+          {{ typeof val === 'object' ? JSON.stringify(val) : val }}
+        </a-descriptions-item>
+      </a-descriptions>
+    </a-modal>
   </div>
 </template>
 
@@ -97,7 +104,7 @@ import { ref, reactive, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
 import { PlusOutlined, SearchOutlined, DownloadOutlined } from '@ant-design/icons-vue'
 import type { MaterialItem, SceneStatus } from '@/types/scenario'
-import { materialApi, statusMap } from '@/api/mock/scenario'
+import { materialApi, statusMap } from '@/api/scene'
 
 // 门店选项
 const storeOptions = ['万达广场店', '龙湖天街店', '华润万家店', '大悦城店']
@@ -114,7 +121,7 @@ const tableData = ref<MaterialItem[]>([])
 const loading = ref(false)
 const pagination = reactive({
   current: 1,
-  pageSize: 10,
+  size: 10,
   total: 0,
   showSizeChanger: true,
   showQuickJumper: true,
@@ -123,6 +130,10 @@ const pagination = reactive({
 
 // 全量数据（用于前端筛选）
 const allData = ref<MaterialItem[]>([])
+
+// 详情弹窗
+const detailVisible = ref(false)
+const detailRecord = ref<any>(null)
 
 // 表格列配置
 const columns = [
@@ -142,7 +153,7 @@ const loadData = async () => {
   try {
     const res = await materialApi.getList({
       page: 1,
-      pageSize: 100
+      size: 100
     })
     allData.value = res.list
     applyFilter()
@@ -210,12 +221,14 @@ const handleExport = () => {
 
 // 查看
 const handleView = (record: MaterialItem) => {
-  message.info(`查看物料更新：${record.code}`)
+  detailRecord.value = record
+  detailVisible.value = true
 }
 
 // 详情
 const handleDetail = (record: MaterialItem) => {
-  message.info(`物料更新详情：${record.code}`)
+  detailRecord.value = record
+  detailVisible.value = true
 }
 
 onMounted(() => {

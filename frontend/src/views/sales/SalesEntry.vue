@@ -161,7 +161,7 @@ import { ref, reactive, computed } from 'vue'
 import { message } from 'ant-design-vue'
 import { PlusOutlined, DeleteOutlined } from '@ant-design/icons-vue'
 import type { SalesItem } from '@/types/sales'
-import { salesApi } from '@/api/mock/sales'
+import { salesApi } from '@/api/sales'
 
 const formRef = ref()
 const submitLoading = ref(false)

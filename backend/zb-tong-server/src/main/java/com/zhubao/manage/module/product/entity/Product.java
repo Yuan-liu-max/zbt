@@ -1,6 +1,7 @@
 package com.zhubao.manage.module.product.entity;
 
 import com.baomidou.mybatisplus.annotation.*;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Data;
 import javax.validation.constraints.DecimalMin;
 import javax.validation.constraints.NotBlank;
@@ -11,11 +12,11 @@ import java.time.LocalDateTime;
 @TableName("product")
 public class Product {
     @TableId(type = IdType.AUTO) private Long id;
-    @NotBlank(message = "商品编码不能为空") private String productCode;
-    @NotBlank(message = "商品名称不能为空") private String productName;
-    @NotBlank(message = "品类不能为空") private String category;
-    @DecimalMin(value = "0.01", message = "零售价必须大于0.01") private BigDecimal retailPrice;
-    private String style;
+    @NotBlank @JsonProperty("code") private String productCode;
+    @NotBlank @JsonProperty("name") private String productName;
+    @NotBlank @JsonProperty("categoryName") private String category;
+    @DecimalMin("0.01") @JsonProperty("price") private BigDecimal retailPrice;
+    @JsonProperty("brandName") private String style;
     private String material;
     private String weight;
     private String size;
@@ -29,4 +30,6 @@ public class Product {
     @TableLogic private Integer isDeleted;
     @TableField(fill = FieldFill.INSERT) private LocalDateTime createdAt;
     @TableField(fill = FieldFill.INSERT_UPDATE) private LocalDateTime updatedAt;
+    @TableField(exist = false) @JsonProperty("stock") private Integer stock;
+    @TableField(exist = false) @JsonProperty("storeName") private String storeName;
 }

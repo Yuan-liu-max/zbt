@@ -121,7 +121,7 @@ import { ref, reactive, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
 import { UserOutlined } from '@ant-design/icons-vue'
 import type { UserInfo } from '@/types/profile'
-import { profileApi } from '@/api/mock/profile'
+import { profileApi } from '@/api/profile'
 
 const activeTab = ref('basic')
 const saveLoading = ref(false)

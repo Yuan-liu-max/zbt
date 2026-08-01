@@ -97,7 +97,7 @@ import {
   AccountBookOutlined, BarChartOutlined, SettingOutlined
 } from '@ant-design/icons-vue'
 import type { UserInfo, UserStats } from '@/types/profile'
-import { profileApi } from '@/api/mock/profile'
+import { profileApi } from '@/api/profile'
 
 const router = useRouter()
 

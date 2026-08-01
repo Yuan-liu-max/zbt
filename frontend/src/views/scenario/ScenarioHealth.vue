@@ -91,6 +91,13 @@
         </template>
       </a-table>
     </div>
+    <a-modal v-model:open="detailVisible" title="详情" :footer="null" width="600px">
+      <a-descriptions :column="2" bordered size="small">
+        <a-descriptions-item v-for="(val, key) in detailRecord" :key="key" :label="String(key)" :span="typeof val === 'object' ? 2 : 1">
+          {{ typeof val === 'object' ? JSON.stringify(val) : val }}
+        </a-descriptions-item>
+      </a-descriptions>
+    </a-modal>
   </div>
 </template>
 
@@ -99,7 +106,7 @@ import { ref, reactive, computed, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
 import { PlusOutlined, SearchOutlined, DownloadOutlined } from '@ant-design/icons-vue'
 import type { InspectionItem, SceneStatus } from '@/types/scenario'
-import { sceneApi, statusMap } from '@/api/mock/scenario'
+import { sceneApi, statusMap } from '@/api/scene'
 
 // 搜索表单
 const searchForm = reactive({
@@ -113,7 +120,7 @@ const tableData = ref<InspectionItem[]>([])
 const loading = ref(false)
 const pagination = reactive({
   current: 1,
-  pageSize: 10,
+  size: 10,
   total: 0,
   showSizeChanger: true,
   showQuickJumper: true,
@@ -132,6 +139,10 @@ const columns = computed(() => [
   { title: '状态', key: 'status', width: 90, align: 'center' as const },
   { title: '操作', key: 'action', width: 120, fixed: 'right' as const }
 ])
+
+// 详情弹窗
+const detailVisible = ref(false)
+const detailRecord = ref<any>(null)
 
 // 加载数据
 const loadData = async () => {
@@ -188,12 +199,14 @@ const handleExport = () => {
 
 // 查看
 const handleView = (record: InspectionItem) => {
-  message.info(`查看巡检: ${record.code}`)
+  detailRecord.value = record
+  detailVisible.value = true
 }
 
 // 详情
 const handleDetail = (record: InspectionItem) => {
-  message.info(`巡检详情: ${record.code}`)
+  detailRecord.value = record
+  detailVisible.value = true
 }
 
 onMounted(() => {

@@ -68,6 +68,8 @@
                 <a-form-item label="系统LOGO" name="logo">
                   <a-upload
                     v-model:file-list="logoFileList"
+                    action="/api/files/upload"
+                    :headers="{ Authorization: `Bearer ${localStorage.getItem('token') || ''}` }"
                     list-type="picture-card"
                     :before-upload="handleLogoBeforeUpload"
                     :max-count="1"
@@ -468,7 +470,7 @@ import { ref, reactive, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
 import { SaveOutlined, ReloadOutlined, PlusOutlined, SettingOutlined, MailOutlined, MessageOutlined, WalletOutlined, CloudOutlined, SafetyOutlined, AppstoreOutlined } from '@ant-design/icons-vue'
 import type { SystemConfig } from '@/types/system'
-import { configApi } from '@/api/mock/system'
+import { configApi } from '@/api/system'
 import type { UploadChangeParam, UploadFile } from 'ant-design-vue'
 
 // 当前选中的配置分类

@@ -151,6 +151,8 @@
         <a-form-item label="附件上传" class="form-item-full">
           <a-upload
             v-model:file-list="formData.attachments"
+            action="/api/files/upload"
+            :headers="{ Authorization: `Bearer ${localStorage.getItem('token')}` }"
             :before-upload="beforeUpload"
             :max-count="10"
             :multiple="true"
@@ -184,8 +186,47 @@ import { useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import { UploadOutlined } from '@ant-design/icons-vue'
 import type { FormInstance } from 'ant-design-vue'
-import type { TaskItem, TaskType, TaskPriority } from '@/types/task'
-import { taskApi, taskTypeMap, priorityMap } from '@/api/mock/task'
+import type { TaskItem, TaskDimension, TaskPriority } from '@/types/task'
+import { taskApi } from '@/api/task'
+
+// 本地映射表
+const taskTypeMap: Record<string, string> = { HUMAN: '人效', PRODUCT: '货品', SCENE: '场景', COMPREHENSIVE: '综合' }
+const priorityMap: Record<string, { text: string; color: string }> = {
+  LOW: { text: '低', color: 'blue' },
+  MEDIUM: { text: '中', color: 'orange' },
+  HIGH: { text: '高', color: 'red' },
+  URGENT: { text: '紧急', color: 'magenta' },
+}
+
+const router = useRouter()
+const formRef = ref()
+const submitting = ref(false)
+
+/* ---------- 响应式 ---------- */
+const isMobileScreen = ref(false)
+const checkScreen = () => {
+  isMobileScreen.value = window.innerWidth < 768
+}
+
+onMounted(() => {
+  checkScreen()
+  window.addEventListener('resize', checkScreen)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('resize', checkScreen)
+})
+
+/* ---------- 下拉选项 ---------- */
+const taskTypeOptions = Object.entries(taskTypeMap).map(([value, label]) => ({
+  value: value,
+  label,
+}))
+
+const priorityOptions = Object.entries(priorityMap).map(([value, info]) => ({
+  value: value,
+  label: info.text,
+}))
 
 const router = useRouter()
 const formRef = ref<FormInstance>()
@@ -208,12 +249,12 @@ onUnmounted(() => {
 
 /* ---------- 下拉选项 ---------- */
 const taskTypeOptions = Object.entries(taskTypeMap).map(([value, label]) => ({
-  value: value as TaskType,
+  value: value,
   label,
 }))
 
 const priorityOptions = Object.entries(priorityMap).map(([value, info]) => ({
-  value: value as TaskPriority,
+  value: value,
   label: info.text,
 }))
 

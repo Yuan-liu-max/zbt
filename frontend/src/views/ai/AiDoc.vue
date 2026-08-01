@@ -54,7 +54,7 @@ import { ref, computed } from 'vue'
 import { message } from 'ant-design-vue'
 import { FileTextOutlined } from '@ant-design/icons-vue'
 import type { DocTemplate, TemplateCategory } from '@/types/ai-tools'
-import { mockTemplates } from '@/api/mock/ai-tools'
+import { mockTemplates } from '@/api/ai'
 
 const currentStep = ref(0)
 const activeCategory = ref<TemplateCategory>('all')

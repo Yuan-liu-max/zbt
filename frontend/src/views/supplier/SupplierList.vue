@@ -177,6 +177,13 @@
         </a-form-item>
       </a-form>
     </a-modal>
+    <a-modal v-model:open="detailVisible" title="详情" :footer="null" width="600px">
+      <a-descriptions :column="2" bordered size="small">
+        <a-descriptions-item v-for="(val, key) in detailRecord" :key="key" :label="String(key)" :span="typeof val === 'object' ? 2 : 1">
+          {{ typeof val === 'object' ? JSON.stringify(val) : val }}
+        </a-descriptions-item>
+      </a-descriptions>
+    </a-modal>
   </div>
 </template>
 
@@ -185,7 +192,7 @@ import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { message } from 'ant-design-vue'
 import { PlusOutlined, SearchOutlined, DownOutlined } from '@ant-design/icons-vue'
 import type { SupplierItem, SupplierQueryParams, SupplierType, CooperationStatus } from '@/types/supplier'
-import { supplierApi, supplierTypeMap, cooperationStatusMap } from '@/api/mock/supplier'
+import { supplierApi, supplierTypeMap, cooperationStatusMap } from '@/api/supplier'
 
 // 联系人列表（用于下拉搜索）
 const contactPersons = computed(() => {
@@ -205,7 +212,7 @@ const tableData = ref<SupplierItem[]>([])
 const loading = ref(false)
 const pagination = reactive({
   current: 1,
-  pageSize: 10,
+  size: 10,
   total: 0,
   showSizeChanger: true,
   showQuickJumper: true,
@@ -240,6 +247,10 @@ const getColumnsValue = () => {
 
 // 表格列配置
 const columns = ref(getColumnsValue())
+
+// 详情弹窗
+const detailVisible = ref(false)
+const detailRecord = ref<any>(null)
 
 // 弹窗相关
 const modalVisible = ref(false)
@@ -331,7 +342,8 @@ const handleAdd = () => {
 
 // 查看
 const handleView = (record: SupplierItem) => {
-  message.info(`查看 ${record.name} 详情`)
+  detailRecord.value = record
+  detailVisible.value = true
 }
 
 // 编辑

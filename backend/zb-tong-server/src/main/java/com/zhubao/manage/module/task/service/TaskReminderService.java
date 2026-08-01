@@ -1,5 +1,6 @@
 package com.zhubao.manage.module.task.service;
 
+import com.zhubao.manage.module.notification.service.NotificationService;
 import com.zhubao.manage.module.task.entity.TaskInstance;
 import com.zhubao.manage.module.task.entity.TaskReminderLog;
 import com.zhubao.manage.module.task.entity.TaskTemplate;
@@ -29,13 +30,16 @@ public class TaskReminderService {
     private final TaskInstanceMapper taskInstanceMapper;
     private final TaskTemplateMapper taskTemplateMapper;
     private final TaskReminderLogMapper reminderLogMapper;
+    private final NotificationService notificationService;
 
     public TaskReminderService(TaskInstanceMapper taskInstanceMapper,
                                TaskTemplateMapper taskTemplateMapper,
-                               TaskReminderLogMapper reminderLogMapper) {
+                               TaskReminderLogMapper reminderLogMapper,
+                               NotificationService notificationService) {
         this.taskInstanceMapper = taskInstanceMapper;
         this.taskTemplateMapper = taskTemplateMapper;
         this.reminderLogMapper = reminderLogMapper;
+        this.notificationService = notificationService;
     }
 
     /**
@@ -54,6 +58,29 @@ public class TaskReminderService {
         log.setSendStatus("PENDING");
         log.setCreatedAt(LocalDateTime.now());
         reminderLogMapper.insert(log);
+
+        // 同时写入 notification 表（前端铃铛/消息列表可见）
+        String title = buildReminderTitle(reminderType, task.getTaskTitle());
+        String content = "任务 \"" + task.getTaskTitle() + "\" " + getReminderDesc(reminderType);
+        notificationService.send(task.getAssigneeId(), title, content, "TASK_REMIND", "TASK", taskId);
+    }
+
+    private String buildReminderTitle(String type, String taskTitle) {
+        switch (type) {
+            case "DEADLINE_2H": return "任务即将截止: " + taskTitle;
+            case "DEADLINE_30M": return "任务即将截止(30分钟): " + taskTitle;
+            case "OVERDUE": return "任务已超时: " + taskTitle;
+            default: return "任务提醒: " + taskTitle;
+        }
+    }
+
+    private String getReminderDesc(String type) {
+        switch (type) {
+            case "DEADLINE_2H": return "截止时间还剩2小时";
+            case "DEADLINE_30M": return "截止时间还剩30分钟";
+            case "OVERDUE": return "已超过截止时间";
+            default: return "请及时处理";
+        }
     }
 
     /**

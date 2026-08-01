@@ -113,7 +113,7 @@
 import { ref, reactive, onMounted } from 'vue'
 import { SearchOutlined } from '@ant-design/icons-vue'
 import type { SalesStats, EmployeeRanking, CategoryStats } from '@/types/sales'
-import { salesApi } from '@/api/mock/sales'
+import { salesApi } from '@/api/sales'
 
 // 当前标签页
 const activeTab = ref('store')

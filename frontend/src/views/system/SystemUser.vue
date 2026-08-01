@@ -146,7 +146,7 @@ import { ref, reactive, onMounted } from 'vue'
 import { message, Modal } from 'ant-design-vue'
 import { PlusOutlined, SearchOutlined, DownOutlined } from '@ant-design/icons-vue'
 import type { UserItem, UserStatus } from '@/types/system'
-import { userApi, roleApi } from '@/api/mock/system'
+import { userApi, roleApi } from '@/api/system'
 
 // 搜索表单
 const searchForm = reactive({
@@ -160,7 +160,7 @@ const tableData = ref<UserItem[]>([])
 const loading = ref(false)
 const pagination = reactive({
   current: 1,
-  pageSize: 10,
+  size: 10,
   total: 0,
   showSizeChanger: true,
   showQuickJumper: true,

@@ -48,7 +48,7 @@ public class AuthService {
     /**
      * 登录 —— 验证密码 → 返回 JWT + 用户信息 + 角色 + 权限
      */
-    @Transactional(readOnly = true)
+    @Transactional
     public LoginResultDTO login(LoginDTO dto) {
         // 查询用户
         User user = userMapper.selectOne(new LambdaQueryWrapper<User>()

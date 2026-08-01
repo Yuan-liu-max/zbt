@@ -123,6 +123,13 @@
         </a-form-item>
       </a-form>
     </a-modal>
+    <a-modal v-model:open="detailVisible" title="详情" :footer="null" width="600px">
+      <a-descriptions :column="2" bordered size="small">
+        <a-descriptions-item v-for="(val, key) in detailRecord" :key="key" :label="String(key)" :span="typeof val === 'object' ? 2 : 1">
+          {{ typeof val === 'object' ? JSON.stringify(val) : val }}
+        </a-descriptions-item>
+      </a-descriptions>
+    </a-modal>
   </div>
 </template>
 
@@ -131,7 +138,7 @@ import { ref, reactive, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
 import { PlusOutlined, SearchOutlined, DownOutlined } from '@ant-design/icons-vue'
 import type { ActivityItem, ActivityQueryParams, ActivityStatus, ActivityType } from '@/types/marketing'
-import { activityApi, activityStatusMap, activityTypeMap } from '@/api/mock/marketing'
+import { activityApi, activityStatusMap, activityTypeMap } from '@/api/marketing'
 
 const searchForm = reactive({
   name: '',
@@ -158,6 +165,9 @@ const columns = [
   { title: '创建时间', dataIndex: 'createdAt', key: 'createdAt', width: 160 },
   { title: '操作', key: 'action', width: 150, fixed: 'right' as const }
 ]
+
+const detailVisible = ref(false)
+const detailRecord = ref<any>(null)
 
 const modalVisible = ref(false)
 const modalLoading = ref(false)
@@ -192,7 +202,7 @@ const handleReset = () => {
 }
 const handleTableChange = (pag: any) => { pagination.current = pag.current; pagination.pageSize = pag.pageSize; loadData() }
 const handleAdd = () => { isEdit.value = false; resetForm(); modalVisible.value = true }
-const handleView = (record: ActivityItem) => { message.info(`查看 ${record.name} 详情`) }
+const handleView = (record: ActivityItem) => { detailRecord.value = record; detailVisible.value = true }
 const handleEdit = (record: ActivityItem) => {
   isEdit.value = true; formData.id = record.id; formData.name = record.name; formData.type = record.type
   formData.scope = record.scope; formData.totalCount = record.totalCount; modalVisible.value = true

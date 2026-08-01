@@ -126,7 +126,7 @@ import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { message } from 'ant-design-vue'
 import { PlusOutlined } from '@ant-design/icons-vue'
 import type { BrandItem, BrandQueryParams, GoodsStatus } from '@/types/goods'
-import { brandApi } from '@/api/mock/goods'
+import { brandApi } from '@/api/goods'
 
 // 搜索表单
 const searchForm = reactive({
@@ -139,7 +139,7 @@ const tableData = ref<BrandItem[]>([])
 const loading = ref(false)
 const pagination = reactive({
   current: 1,
-  pageSize: 10,
+  size: 10,
   total: 0,
   showSizeChanger: true,
   showQuickJumper: true,

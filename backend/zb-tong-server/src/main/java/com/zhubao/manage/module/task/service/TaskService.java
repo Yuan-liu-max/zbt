@@ -9,6 +9,8 @@ import com.zhubao.manage.common.exception.ErrorCode;
 import com.zhubao.manage.module.organization.entity.Store;
 import com.zhubao.manage.module.organization.mapper.StoreMapper;
 import com.zhubao.manage.module.task.dto.TaskQueryDTO;
+import com.zhubao.manage.module.user.entity.User;
+import com.zhubao.manage.module.user.mapper.UserMapper;
 import com.zhubao.manage.module.task.entity.TaskInstance;
 import com.zhubao.manage.module.task.entity.TaskTemplate;
 import com.zhubao.manage.module.task.mapper.TaskInstanceMapper;
@@ -28,13 +30,15 @@ public class TaskService {
     private final TaskInstanceMapper taskInstanceMapper;
     private final TaskTemplateMapper taskTemplateMapper;
     private final StoreMapper storeMapper;
+    private final UserMapper userMapper;
 
     public TaskService(TaskInstanceMapper taskInstanceMapper,
                        TaskTemplateMapper taskTemplateMapper,
-                       StoreMapper storeMapper) {
+                       StoreMapper storeMapper, UserMapper userMapper) {
         this.taskInstanceMapper = taskInstanceMapper;
         this.taskTemplateMapper = taskTemplateMapper;
         this.storeMapper = storeMapper;
+        this.userMapper = userMapper;
     }
 
     // ============ 生成任务 ============
@@ -85,13 +89,17 @@ public class TaskService {
         Page<TaskInstance> page = new Page<>(query.getPageNum(), query.getPageSize());
         LambdaQueryWrapper<TaskInstance> w = buildQueryWrapper(query);
         w.orderByDesc(TaskInstance::getCreatedAt);
-        return taskInstanceMapper.selectPage(page, w);
+        IPage<TaskInstance> result = taskInstanceMapper.selectPage(page, w);
+        fillAssigneeNames(result.getRecords());
+        return result;
     }
 
     /** 多条件筛选列表 */
     public List<TaskInstance> listTasks(TaskQueryDTO query) {
-        return taskInstanceMapper.selectList(buildQueryWrapper(query)
+        List<TaskInstance> list = taskInstanceMapper.selectList(buildQueryWrapper(query)
                 .orderByDesc(TaskInstance::getCreatedAt));
+        fillAssigneeNames(list);
+        return list;
     }
 
     /** 我的任务 */
@@ -102,7 +110,28 @@ public class TaskService {
             w.eq(TaskInstance::getStatus, status);
         }
         w.orderByDesc(TaskInstance::getCreatedAt);
-        return taskInstanceMapper.selectList(w);
+        List<TaskInstance> list = taskInstanceMapper.selectList(w);
+        fillAssigneeNames(list);
+        return list;
+    }
+
+    /** 批量填充 assigneeName / auditorName */
+    private void fillAssigneeNames(List<TaskInstance> tasks) {
+        if (tasks.isEmpty()) return;
+        java.util.Set<Long> userIds = new java.util.HashSet<>();
+        for (TaskInstance t : tasks) {
+            if (t.getAssigneeId() != null) userIds.add(t.getAssigneeId());
+            if (t.getAuditorId() != null) userIds.add(t.getAuditorId());
+        }
+        if (userIds.isEmpty()) return;
+        java.util.Map<Long, String> nameMap = new java.util.HashMap<>();
+        for (User u : userMapper.selectBatchIds(userIds)) {
+            nameMap.put(u.getId(), u.getRealName());
+        }
+        for (TaskInstance t : tasks) {
+            t.setAssigneeName(nameMap.getOrDefault(t.getAssigneeId(), null));
+            t.setAuditorName(nameMap.getOrDefault(t.getAuditorId(), null));
+        }
     }
 
     /** 待审核任务 */

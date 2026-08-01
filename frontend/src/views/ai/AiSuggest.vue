@@ -66,7 +66,7 @@ import { ref, computed } from 'vue'
 import { message } from 'ant-design-vue'
 import { RocketOutlined } from '@ant-design/icons-vue'
 import type { AiSuggestion } from '@/types/ai-tools'
-import { mockSuggestions } from '@/api/mock/ai-tools'
+import { mockSuggestions } from '@/api/ai'
 
 const activeCategory = ref('库存优化分析')
 const dateRange = ref<any>(null)

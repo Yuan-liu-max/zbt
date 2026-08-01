@@ -9,6 +9,7 @@ public class UserContext {
     private String username;
     private Long storeId;
     private Long regionId;
+    private String dataScopeLevel;
 
     public UserContext() {}
 
@@ -43,6 +44,9 @@ public class UserContext {
     public void setRegionId(Long regionId) {
         this.regionId = regionId;
     }
+
+    public String getDataScopeLevel() { return dataScopeLevel; }
+    public void setDataScopeLevel(String v) { this.dataScopeLevel = v; }
 
     @Override
     public String toString() {

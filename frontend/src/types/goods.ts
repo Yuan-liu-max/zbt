@@ -1,7 +1,7 @@
 // 商品管理相关类型定义
 
 // 商品状态
-export type GoodsStatus = 'on' | 'off'
+export type GoodsStatus = 'ON_SALE' | 'SOLD' | 'TRANSFER' | 'REPAIR' | 'OFF_SHELF'
 
 // 商品分类层级
 export type CategoryLevel = 1 | 2 | 3
@@ -15,10 +15,17 @@ export interface GoodsItem {
   categoryName: string   // 分类名称
   brandId: string        // 品牌ID
   brandName: string      // 品牌名称
-  price: number          // 售价
+  retailPrice: number    // 零售价
   costPrice: number      // 成本价（敏感字段）
   grossMarginRate: number // 毛利率（敏感字段）
   stock: number          // 库存数量
+  style: string          // 款式
+  material: string       // 材质
+  weight: string         // 重量
+  size: string           // 手寸/圈号
+  color: string          // 颜色
+  shape: string          // 形状
+  meaning: string        // 寓意
   storeId: string        // 所属门店ID
   storeName: string      // 所属门店名称
   status: GoodsStatus    // 状态：上架/下架
@@ -66,6 +73,21 @@ export interface GoodsQueryParams {
   storeId?: string       // 门店
   page: number
   pageSize: number
+}
+
+// 统一 API 响应包装
+export interface ApiResponse<T> {
+  code: number
+  msg: string
+  data: T
+}
+
+// 商品分页响应
+export interface GoodsPaginatedResponse<T> {
+  list: T[]
+  total: number
+  page: number
+  size: number
 }
 
 // 品牌查询参数

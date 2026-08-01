@@ -69,7 +69,7 @@ import { ref, nextTick } from 'vue'
 import { message } from 'ant-design-vue'
 import { SendOutlined } from '@ant-design/icons-vue'
 import type { ChatMessage } from '@/types/ai-tools'
-import { mockChatMessages } from '@/api/mock/ai-tools'
+import { mockChatMessages } from '@/api/ai'
 
 const messages = ref<ChatMessage[]>([...mockChatMessages])
 const inputText = ref('')

@@ -28,18 +28,25 @@ public class ProductController {
     private final ProductSalesAnalysisMapper salesAnalysisMapper;
     private final NewProductPlanMapper newProductPlanMapper;
     private final PromotionPlanMapper promotionPlanMapper;
+    private final com.zhubao.manage.module.organization.mapper.StoreMapper storeMapper;
 
     public ProductController(ProductService svc, ProductMapper pm, ProductInventoryCheckMapper im,
                              ProductMaintenanceCheckMapper mm, ProductSalesAnalysisMapper sm,
-                             NewProductPlanMapper nm, PromotionPlanMapper pm2) {
+                             NewProductPlanMapper nm, PromotionPlanMapper pm2,
+                             com.zhubao.manage.module.organization.mapper.StoreMapper stm) {
         this.svc = svc; this.productMapper = pm; this.inventoryMapper = im;
         this.maintenanceMapper = mm; this.salesAnalysisMapper = sm;
         this.newProductPlanMapper = nm; this.promotionPlanMapper = pm2;
+        this.storeMapper = stm;
     }
 
     // ===== 商品档案 =====
     @ApiOperation("商品列表（含角色过滤）") @GetMapping
-    public ApiResult<List<Product>> listProducts() { return ApiResult.ok(svc.listFiltered()); }
+    public ApiResult<List<Product>> listProducts() {
+        List<Product> list = svc.listFiltered();
+        fillStockAndStoreName(list);
+        return ApiResult.ok(list);
+    }
     @ApiOperation("商品分页") @GetMapping("/page")
     public ApiResult<PageResult<Product>> pageProducts(@Valid PageDTO dto) {
         IPage<Product> r = svc.page(productMapper, dto, new LambdaQueryWrapper<Product>().orderByDesc(Product::getCreatedAt));
@@ -117,4 +124,106 @@ public class ProductController {
     public ApiResult<Void> updatePromotion(@PathVariable Long id, @Valid @RequestBody PromotionPlan e) { e.setId(id); svc.update(promotionPlanMapper, e); return ApiResult.ok(); }
     @ApiOperation("删除促销方案") @DeleteMapping("/promotion-plans/{id}")
     public ApiResult<Void> deletePromotion(@PathVariable Long id) { svc.del(promotionPlanMapper, id); return ApiResult.ok(); }
+
+    // ===== 分类/品牌（Product.category=分类, Product.style=品牌） =====
+
+    @GetMapping("/categories/tree")
+    public ApiResult<java.util.List<java.util.Map<String, Object>>> categoryTree() {
+        java.util.List<Product> all = productMapper.selectList(null);
+        java.util.Map<String, java.util.Map<String, Object>> tree = new java.util.LinkedHashMap<>();
+        for (Product p : all) {
+            String cat = p.getCategory();
+            if (cat == null) continue;
+            String parent = cat.contains("黄金") ? "黄金" : cat.contains("钻石") ? "钻石"
+                    : cat.contains("K金") ? "K金" : cat.contains("翡翠") ? "翡翠"
+                    : cat.contains("珍珠") ? "珍珠" : cat.contains("铂金") ? "铂金"
+                    : cat.contains("银") ? "银饰" : "其他";
+            tree.putIfAbsent(parent, new java.util.LinkedHashMap<>());
+            java.util.Map<String, Object> pNode = tree.get(parent);
+            pNode.putIfAbsent("id", parent);
+            pNode.putIfAbsent("name", parent);
+            @SuppressWarnings("unchecked")
+            java.util.List<java.util.Map<String, String>> children = (java.util.List<java.util.Map<String, String>>)
+                    pNode.computeIfAbsent("children", k -> new java.util.ArrayList<>());
+            java.util.Map<String, String> child = new java.util.LinkedHashMap<>();
+            child.put("id", cat); child.put("name", cat);
+            if (children.stream().noneMatch(c -> cat.equals(c.get("id")))) children.add(child);
+        }
+        return ApiResult.ok(new java.util.ArrayList<>(tree.values()));
+    }
+
+    @GetMapping("/categories")
+    public ApiResult<java.util.List<java.util.Map<String, String>>> categories() {
+        return ApiResult.ok(productMapper.selectList(null).stream()
+                .filter(p -> p.getCategory() != null)
+                .map(p -> { java.util.Map<String, String> m = new java.util.LinkedHashMap<>(); m.put("id", p.getCategory()); m.put("name", p.getCategory()); return m; })
+                .collect(java.util.stream.Collectors.toCollection(() -> new java.util.TreeSet<>(java.util.Comparator.comparing(m -> m.get("id")))))
+                .stream().collect(java.util.stream.Collectors.toList()));
+    }
+
+    @GetMapping("/brands")
+    public ApiResult<PageResult<java.util.Map<String, String>>> brands(@Valid PageDTO dto, @RequestParam(required = false) String name) {
+        java.util.List<java.util.Map<String, String>> all = productMapper.selectList(null).stream()
+                .filter(p -> p.getStyle() != null)
+                .map(p -> { java.util.Map<String, String> m = new java.util.LinkedHashMap<>(); m.put("id", p.getStyle()); m.put("name", p.getStyle()); return m; })
+                .collect(java.util.stream.Collectors.toCollection(() -> new java.util.TreeSet<>(java.util.Comparator.comparing(m -> m.get("id")))))
+                .stream().filter(b -> name == null || b.get("name").contains(name))
+                .collect(java.util.stream.Collectors.toList());
+        int start = (int) ((dto.getPageNum() - 1) * dto.getPageSize());
+        java.util.List<java.util.Map<String, String>> page = all.stream().skip(start).limit(dto.getPageSize()).collect(java.util.stream.Collectors.toList());
+        return ApiResult.ok(new PageResult<>(dto.getPageNum(), dto.getPageSize(), (long) all.size(), page));
+    }
+
+    @GetMapping("/brands/all")
+    public ApiResult<java.util.List<java.util.Map<String, String>>> brandsAll() {
+        return ApiResult.ok(productMapper.selectList(null).stream()
+                .filter(p -> p.getStyle() != null && "on".equals(p.getStatus()))
+                .map(p -> { java.util.Map<String, String> m = new java.util.LinkedHashMap<>(); m.put("id", p.getStyle()); m.put("name", p.getStyle()); return m; })
+                .collect(java.util.stream.Collectors.toCollection(() -> new java.util.TreeSet<>(java.util.Comparator.comparing(m -> m.get("id")))))
+                .stream().collect(java.util.stream.Collectors.toList()));
+    }
+
+    /** 填充 stock(最新盘点数量) 和 storeName */
+    private void fillStockAndStoreName(java.util.List<Product> list) {
+        if (list.isEmpty()) return;
+        java.util.Set<Long> storeIds = new java.util.HashSet<>();
+        java.util.Set<Long> productIds = new java.util.HashSet<>();
+        for (Product p : list) { if (p.getStoreId() != null) storeIds.add(p.getStoreId()); productIds.add(p.getId()); }
+        java.util.Map<Long, String> storeNameMap = new java.util.HashMap<>();
+        if (!storeIds.isEmpty()) {
+            for (com.zhubao.manage.module.organization.entity.Store s : storeMapper.selectBatchIds(storeIds))
+                storeNameMap.put(s.getId(), s.getStoreName());
+        }
+        for (Product p : list) {
+            if (p.getStoreId() != null) p.setStoreName(storeNameMap.get(p.getStoreId()));
+            // stock 从最近一次盘点取 totalCheckedCount
+            ProductInventoryCheck check = inventoryMapper.selectOne(
+                    new LambdaQueryWrapper<ProductInventoryCheck>()
+                            .eq(ProductInventoryCheck::getStoreId, p.getStoreId())
+                            .orderByDesc(ProductInventoryCheck::getCheckDate).last("LIMIT 1"));
+            p.setStock(check != null ? check.getTotalCheckedCount() : 0);
+        }
+    }
+
+    @ApiOperation("库存调整") @PutMapping("/{id}/adjust-stock")
+    public ApiResult<Void> adjustStock(@PathVariable Long id, @RequestBody java.util.Map<String, Object> body) {
+        Product p = productMapper.selectById(id);
+        if (p == null) return ApiResult.fail("商品不存在");
+        int delta = ((Number) body.get("delta")).intValue();
+        p.setStock((p.getStock() != null ? p.getStock() : 0) + delta);
+        productMapper.updateById(p);
+        return ApiResult.ok();
+    }
+
+    @ApiOperation("商品调拨") @PostMapping("/transfer")
+    public ApiResult<Void> transfer(@RequestBody java.util.Map<String, Object> body) {
+        Long productId = ((Number) body.get("productId")).longValue();
+        Long toStoreId = ((Number) body.get("toStoreId")).longValue();
+        int qty = ((Number) body.get("quantity")).intValue();
+        Product from = productMapper.selectById(productId);
+        if (from == null) return ApiResult.fail("商品不存在");
+        from.setStock(from.getStock() - qty);
+        productMapper.updateById(from);
+        return ApiResult.ok();
+    }
 }

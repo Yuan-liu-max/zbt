@@ -65,7 +65,12 @@ import {
   UserOutlined, GlobalOutlined, CustomerServiceOutlined, RobotOutlined, SettingOutlined
 } from '@ant-design/icons-vue'
 import type { MessageItem } from '@/types/profile'
-import { messageApi, messageTypeMap } from '@/api/mock/profile'
+import { notificationApi } from '@/api/notification'
+
+const messageTypeMap: Record<string, string> = {
+  TASK_START: '任务开始', TASK_DEADLINE: '任务截止', TASK_OVERDUE: '任务超时',
+  TASK_AUDIT: '任务审核', TASK_REJECTED: '已驳回', SYSTEM: '系统通知'
+}
 
 const activeTab = ref('all')
 const allMessages = ref<MessageItem[]>([])
@@ -87,14 +92,14 @@ const iconMap: Record<string, any> = {
   UserOutlined, GlobalOutlined, CustomerServiceOutlined, RobotOutlined, SettingOutlined
 }
 
-const getTypeIcon = (type: string) => iconMap[messageTypeMap[type]?.icon] || UserOutlined
-const getTypeColor = (type: string) => messageTypeMap[type]?.color || '#999'
+const getTypeIcon = () => UserOutlined
+const getTypeColor = () => '#1890ff'
 
 const formatContent = (content: string) => content.replace(/\n/g, '<br>')
 
 const loadData = async () => {
   try {
-    allMessages.value = await messageApi.getList()
+    allMessages.value = await notificationApi.getList()
   } catch { message.error('加载失败') }
 }
 

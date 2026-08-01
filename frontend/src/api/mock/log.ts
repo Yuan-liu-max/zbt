@@ -51,12 +51,12 @@ export const logApi = {
       )
     }
 
-    const start = (params.page - 1) * params.pageSize
+    const start = (params.page - 1) * params.size
     return {
-      list: filtered.slice(start, start + params.pageSize),
+      list: filtered.slice(start, start + params.size),
       total: filtered.length,
       page: params.page,
-      pageSize: params.pageSize
+      size: params.size
     }
   },
 

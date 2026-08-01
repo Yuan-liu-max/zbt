@@ -144,6 +144,13 @@
         </template>
       </a-table>
     </div>
+    <a-modal v-model:open="detailVisible" title="详情" :footer="null" width="600px">
+      <a-descriptions :column="2" bordered size="small">
+        <a-descriptions-item v-for="(val, key) in detailRecord" :key="key" :label="String(key)" :span="typeof val === 'object' ? 2 : 1">
+          {{ typeof val === 'object' ? JSON.stringify(val) : val }}
+        </a-descriptions-item>
+      </a-descriptions>
+    </a-modal>
   </div>
 </template>
 
@@ -158,8 +165,9 @@ import {
   ClockCircleOutlined,
   CarOutlined
 } from '@ant-design/icons-vue'
+import { exportComingSoon } from '@/utils/export'
 import type { InventoryWarningItem, InventoryStats, InventoryWarningParams, WarningType } from '@/types/goods'
-import { inventoryWarningApi } from '@/api/mock/goods'
+import { inventoryWarningApi } from '@/api/goods'
 
 // 仓库数据
 const warehouses = [
@@ -176,6 +184,10 @@ const alertSummary = reactive<InventoryStats>({
   transitTimeoutCount: 0
 })
 
+// 详情弹窗
+const detailVisible = ref(false)
+const detailRecord = ref<any>(null)
+
 // 搜索表单
 const searchForm = reactive({
   alertType: undefined as WarningType | undefined,
@@ -189,7 +201,7 @@ const tableData = ref<InventoryWarningItem[]>([])
 const loading = ref(false)
 const pagination = reactive({
   current: 1,
-  pageSize: 10,
+  size: 10,
   total: 0,
   showSizeChanger: true,
   showQuickJumper: true,
@@ -282,7 +294,7 @@ const handleReset = () => {
 
 // 导出
 const handleExport = () => {
-  message.success('导出功能开发中...')
+  exportComingSoon('库存预警数据')
 }
 
 // 表格分页
@@ -308,7 +320,8 @@ const handleProcess = (record: InventoryWarningItem) => {
 
 // 详情
 const handleDetail = (record: InventoryWarningItem) => {
-  message.info(`查看 ${record.productName} 预警详情`)
+  detailRecord.value = record
+  detailVisible.value = true
 }
 
 onMounted(() => {

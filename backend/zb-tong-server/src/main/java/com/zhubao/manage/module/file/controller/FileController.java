@@ -15,6 +15,7 @@ import java.util.Map;
 @Api(tags = "文件管理")
 @RestController
 @RequestMapping("/files")
+@org.springframework.security.access.prepost.PreAuthorize("isAuthenticated()")
 public class FileController {
 
     private final FileService fileService;

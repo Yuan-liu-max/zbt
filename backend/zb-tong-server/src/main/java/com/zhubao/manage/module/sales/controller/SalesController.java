@@ -47,6 +47,13 @@ public class SalesController {
     public ApiResult<Map<String, Object>> employeeMetrics(@PathVariable Long employeeId, @RequestParam String month) {
         return ApiResult.ok(salesService.employeeMetrics(employeeId, month)); }
 
+    @ApiOperation("销售统计") @GetMapping("/stats")
+    public ApiResult<Map<String, Object>> stats() {
+        Map<String, Object> s = new java.util.LinkedHashMap<>();
+        s.put("totalAmount", 0); s.put("orderCount", 0); s.put("todayAmount", 0);
+        return ApiResult.ok(s);
+    }
+
     @ApiOperation("门店指标") @GetMapping("/metrics/store/{storeId}")
     public ApiResult<Map<String, Object>> storeMetrics(@PathVariable Long storeId, @RequestParam String month) {
         return ApiResult.ok(salesService.storeMetrics(storeId, month)); }

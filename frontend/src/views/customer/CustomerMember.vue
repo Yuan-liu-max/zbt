@@ -186,7 +186,7 @@ import {
   TeamOutlined
 } from '@ant-design/icons-vue'
 import type { MemberLevel, MemberQueryParams, MemberStats, MemberLevelStatus } from '@/types/customer'
-import { memberApi } from '@/api/mock/customer'
+import { memberApi } from '@/api/customer'
 
 // 会员统计
 const memberStats = reactive<MemberStats>({
@@ -209,7 +209,7 @@ const tableData = ref<MemberLevel[]>([])
 const loading = ref(false)
 const pagination = reactive({
   current: 1,
-  pageSize: 10,
+  size: 10,
   total: 0,
   showSizeChanger: true,
   showQuickJumper: true,

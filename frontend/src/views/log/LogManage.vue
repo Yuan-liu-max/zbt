@@ -124,7 +124,7 @@ import { ref, reactive, computed, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
 import { SearchOutlined, ReloadOutlined, DownloadOutlined, DeleteOutlined } from '@ant-design/icons-vue'
 import type { LogItem, LogQueryParams, LogResult } from '@/types/log'
-import { logApi, resultMap } from '@/api/mock/log'
+import { logApi, resultMap } from '@/api/log'
 
 // 搜索表单
 const searchForm = reactive({

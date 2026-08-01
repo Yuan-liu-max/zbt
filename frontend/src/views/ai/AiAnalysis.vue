@@ -92,7 +92,7 @@ import { ref, reactive } from 'vue'
 import { message } from 'ant-design-vue'
 import { RocketOutlined } from '@ant-design/icons-vue'
 import type { AnalysisReport } from '@/types/ai-tools'
-import { mockAnalysisReport } from '@/api/mock/ai-tools'
+import { mockAnalysisReport } from '@/api/ai'
 
 const activeType = ref('销售数据分析')
 const dateRange = ref<any>(null)

@@ -69,14 +69,14 @@ const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
 
 // 门店 API
 export const storeApi = {
-  async getList(params: { name?: string; status?: StoreStatus; region?: string; page: number; pageSize: number }) {
+  async getList(params: { name?: string; status?: StoreStatus; region?: string; page: number; size: number }) {
     await delay(300)
     let filtered = [...mockStores]
     if (params.name) filtered = filtered.filter(item => item.name.includes(params.name!))
     if (params.status) filtered = filtered.filter(item => item.status === params.status)
     if (params.region) filtered = filtered.filter(item => item.region.includes(params.region!))
-    const start = (params.page - 1) * params.pageSize
-    return { list: filtered.slice(start, start + params.pageSize), total: filtered.length, page: params.page, pageSize: params.pageSize }
+    const start = (params.page - 1) * params.size
+    return { list: filtered.slice(start, start + params.size), total: filtered.length, page: params.page, size: params.size }
   },
   async create(data: Partial<StoreItem>) {
     await delay(500)
@@ -115,14 +115,14 @@ export const storeApi = {
 
 // 用户 API
 export const userApi = {
-  async getList(params: { username?: string; phone?: string; status?: UserStatus; page: number; pageSize: number }) {
+  async getList(params: { username?: string; phone?: string; status?: UserStatus; page: number; size: number }) {
     await delay(300)
     let filtered = [...mockUsers]
     if (params.username) filtered = filtered.filter(item => item.username.includes(params.username!))
     if (params.phone) filtered = filtered.filter(item => item.phone.includes(params.phone!))
     if (params.status) filtered = filtered.filter(item => item.status === params.status)
-    const start = (params.page - 1) * params.pageSize
-    return { list: filtered.slice(start, start + params.pageSize), total: filtered.length, page: params.page, pageSize: params.pageSize }
+    const start = (params.page - 1) * params.size
+    return { list: filtered.slice(start, start + params.size), total: filtered.length, page: params.page, size: params.size }
   }
 }
 

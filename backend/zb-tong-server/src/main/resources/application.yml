@@ -96,6 +96,8 @@ xxl:
     accessToken: ${XXL_ACCESS_TOKEN}
     executor:
       appname: zb-tong-executor
+      address:
+      ip:
       port: 9999
       logpath: logs/xxl-job
       logretentiondays: 30

@@ -171,15 +171,24 @@
         </a-form-item>
       </a-form>
     </a-modal>
+    <a-modal v-model:open="detailVisible" title="详情" :footer="null" width="600px">
+      <a-descriptions :column="2" bordered size="small">
+        <a-descriptions-item v-for="(val, key) in detailRecord" :key="key" :label="String(key)" :span="typeof val === 'object' ? 2 : 1">
+          {{ typeof val === 'object' ? JSON.stringify(val) : val }}
+        </a-descriptions-item>
+      </a-descriptions>
+    </a-modal>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
+import request from '@/utils/request'
 import { message } from 'ant-design-vue'
 import { PlusOutlined, SearchOutlined, ExportOutlined, DownOutlined } from '@ant-design/icons-vue'
 import type { GoodsItem, GoodsQueryParams, GoodsStatus, GoodsCategory, BrandItem, StoreItem } from '@/types/goods'
-import { goodsApi, categoryApi, brandApi } from '@/api/mock/goods'
+import { goodsApi, categoryApi, brandApi } from '@/api/goods'
+import { exportComingSoon } from '@/utils/export'
 
 // 库存状态（独立于商品上下架状态）
 type InventoryStatus = 'normal' | 'warning' | 'shortage'
@@ -221,6 +230,10 @@ const columns = [
   { title: '库存状态', dataIndex: 'status', key: 'inventoryStatus', width: 90, align: 'center' as const },
   { title: '操作', key: 'action', width: 160, fixed: 'right' as const }
 ]
+
+// 详情弹窗
+const detailVisible = ref(false)
+const detailRecord = ref<any>(null)
 
 // 弹窗相关
 const modalVisible = ref(false)
@@ -343,7 +356,7 @@ const handleReset = () => {
 
 // 导出
 const handleExport = () => {
-  message.success('导出功能开发中...')
+  exportComingSoon('库存数据')
 }
 
 // 表格分页
@@ -369,28 +382,65 @@ const handleEdit = (record: GoodsItem) => {
   formData.categoryId = record.categoryId ? [record.categoryId] : []
   formData.storeId = record.storeId
   formData.brandId = record.brandId
-  formData.price = record.price
+  formData.price = record.retailPrice
   formData.stock = record.stock
   formData.status = record.status
   modalVisible.value = true
 }
 
-// TODO: 详情
+// 详情
 const handleDetail = (record: GoodsItem) => {
-  // TODO: 实现详情查看功能
-  message.info(`查看 ${record.name} 详情`)
+  detailRecord.value = record
+  detailVisible.value = true
 }
 
-// TODO: 库存调整
+// 库存调整
+const adjustVisible = ref(false)
+const adjustRecord = ref<GoodsItem | null>(null)
+const adjustForm = reactive({ delta: 0, reason: '' })
+
 const handleAdjust = (record: GoodsItem) => {
-  // TODO: 实现库存调整功能
-  message.info(`调整 ${record.name} 库存`)
+  adjustRecord.value = record
+  adjustForm.delta = 0
+  adjustForm.reason = ''
+  adjustVisible.value = true
 }
 
-// TODO: 调拨
+const handleAdjustOk = async () => {
+  try {
+    await request.put(`/products/${adjustRecord.value!.id}/adjust-stock`, {
+      delta: adjustForm.delta,
+      reason: adjustForm.reason
+    })
+    message.success('调整成功')
+    adjustVisible.value = false
+    loadData()
+  } catch { message.error('调整失败') }
+}
+
+// 调拨
+const transferVisible = ref(false)
+const transferRecord = ref<GoodsItem | null>(null)
+const transferForm = reactive({ toStoreId: '', quantity: 0 })
+
 const handleTransfer = (record: GoodsItem) => {
-  // TODO: 实现调拨功能
-  message.info(`调拨 ${record.name}`)
+  transferRecord.value = record
+  transferForm.toStoreId = ''
+  transferForm.quantity = 0
+  transferVisible.value = true
+}
+
+const handleTransferOk = async () => {
+  try {
+    await request.post('/products/transfer', {
+      productId: transferRecord.value!.id,
+      toStoreId: transferForm.toStoreId,
+      quantity: transferForm.quantity
+    })
+    message.success('调拨成功')
+    transferVisible.value = false
+    loadData()
+  } catch { message.error('调拨失败') }
 }
 
 // 弹窗确认
@@ -445,7 +495,7 @@ const resetForm = () => {
   formData.brandId = ''
   formData.price = 0
   formData.stock = 0
-  formData.status = 'on'
+  formData.status = 'ON_SALE'
 }
 
 onMounted(() => {

@@ -111,8 +111,10 @@ import { ref, reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import { UserOutlined, LockOutlined, CheckCircleOutlined } from '@ant-design/icons-vue'
+import { useAuthStore } from '@/stores/useAuthStore'
 
 const router = useRouter()
+const authStore = useAuthStore()
 const formRef = ref()
 const loginLoading = ref(false)
 const rememberMe = ref(false)
@@ -133,24 +135,12 @@ const handleLogin = async () => {
     await formRef.value?.validateFields()
     loginLoading.value = true
 
-    // 模拟登录
-    await new Promise(resolve => setTimeout(resolve, 1000))
+    const data = await authStore.login(formData.username, formData.password)
 
-    if (formData.username === 'admin' && formData.password === '123456') {
-      localStorage.setItem('token', 'mock_token_' + Date.now())
-      localStorage.setItem('userInfo', JSON.stringify({
-        id: '1',
-        username: 'admin',
-        name: '管理员',
-        role: '超级管理员'
-      }))
-      message.success('登录成功！')
-      router.push('/dashboard')
-    } else {
-      message.error('用户名或密码错误')
-    }
-  } catch (error) {
-    console.error('登录失败', error)
+    message.success('登录成功！')
+    router.push('/dashboard')
+  } catch (error: any) {
+    // 错误已由 request.ts 拦截器统一提示
   } finally {
     loginLoading.value = false
   }

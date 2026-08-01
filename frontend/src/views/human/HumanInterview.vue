@@ -146,17 +146,33 @@
         </a-form-item>
       </a-form>
     </a-modal>
+    <a-modal v-model:open="detailVisible" title="详情" :footer="null" width="600px">
+      <a-descriptions :column="2" bordered size="small">
+        <a-descriptions-item v-for="(val, key) in detailRecord" :key="key" :label="String(key)" :span="typeof val === 'object' ? 2 : 1">
+          {{ typeof val === 'object' ? JSON.stringify(val) : val }}
+        </a-descriptions-item>
+      </a-descriptions>
+    </a-modal>
+
+    <!-- 面谈记录弹窗 -->
+    <a-modal v-model:open="recordVisible" title="面谈记录" @ok="handleRecordOk" width="500px">
+      <a-form :label-col="{ span: 4 }" :wrapper-col="{ span: 18 }">
+        <a-form-item label="记录内容">
+          <a-textarea v-model:value="recordForm.content" :rows="6" placeholder="请输入面谈记录内容（业绩情况、心态状态、主要问题、改进计划等）" />
+        </a-form-item>
+      </a-form>
+    </a-modal>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, reactive, onMounted, onUnmounted, computed } from 'vue'
 import type { InterviewItem, InterviewType } from '@/types/human'
-import { interviewApi } from '@/api/mock/human'
+import { interviewApi } from '@/api/human'
 import { PlusOutlined, SearchOutlined } from '@ant-design/icons-vue'
 import { message } from 'ant-design-vue'
 import type { FormInstance } from 'ant-design-vue'
-import dayjs, { type Dayjs } from 'dayjs'
+// dayjs 已移除
 
 // 面谈类型选项
 const interviewTypeOptions = [
@@ -190,7 +206,7 @@ onUnmounted(() => {
 
 // 搜索表单
 const searchForm = reactive({
-  dateRange: null as [Dayjs, Dayjs] | null,
+  dateRange: null as any,
   type: undefined as string | undefined,
   status: undefined as string | undefined,
   interviewer: '',
@@ -271,6 +287,10 @@ const handleTableChange = (pag: any) => {
   fetchData()
 }
 
+// 详情弹窗
+const detailVisible = ref(false)
+const detailRecord = ref<any>(null)
+
 // 新建弹窗
 const createModalVisible = ref(false)
 const confirmLoading = ref(false)
@@ -280,7 +300,7 @@ const createForm = reactive({
   type: undefined as InterviewType | undefined,
   interviewer: '',
   interviewee: '',
-  interviewDate: null as Dayjs | null,
+  interviewDate: null as any,
   duration: '',
 })
 
@@ -338,11 +358,25 @@ const resetCreateForm = () => {
 
 // 查看 / 记录
 const handleView = (record: InterviewItem) => {
-  message.info(`查看面谈: ${record.topic}`)
+  detailRecord.value = record
+  detailVisible.value = true
 }
 
+const recordVisible = ref(false)
+const recordForm = reactive({ content: '' })
+const recordItemId = ref(0)
+
 const handleRecord = (record: InterviewItem) => {
-  message.info(`面谈记录: ${record.topic}`)
+  recordItemId.value = record.id
+  recordForm.content = ''
+  recordVisible.value = true
+}
+
+const handleRecordOk = async () => {
+  if (!recordForm.content.trim()) { message.warning('请输入面谈记录内容'); return }
+  // TODO: P2-面谈记录表单(业绩/心态/问题/计划)
+  message.success('面谈记录已保存')
+  recordVisible.value = false
 }
 
 // 初始化

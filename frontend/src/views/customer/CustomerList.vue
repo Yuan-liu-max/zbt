@@ -134,6 +134,13 @@
         </a-form-item>
       </a-form>
     </a-modal>
+    <a-modal v-model:open="detailVisible" title="详情" :footer="null" width="600px">
+      <a-descriptions :column="2" bordered size="small">
+        <a-descriptions-item v-for="(val, key) in detailRecord" :key="key" :label="String(key)" :span="typeof val === 'object' ? 2 : 1">
+          {{ typeof val === 'object' ? JSON.stringify(val) : val }}
+        </a-descriptions-item>
+      </a-descriptions>
+    </a-modal>
   </div>
 </template>
 
@@ -142,7 +149,8 @@ import { ref, reactive, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
 import { PlusOutlined, SearchOutlined, ExportOutlined } from '@ant-design/icons-vue'
 import type { CustomerItem, CustomerQueryParams, CustomerLevel } from '@/types/customer'
-import { customerApi, levelColorMap, levelTextMap } from '@/api/mock/customer'
+import { customerApi, levelColorMap, levelTextMap } from '@/api/customer'
+import { exportComingSoon } from '@/utils/export'
 
 // 搜索表单
 const searchForm = reactive({
@@ -157,7 +165,7 @@ const tableData = ref<CustomerItem[]>([])
 const loading = ref(false)
 const pagination = reactive({
   current: 1,
-  pageSize: 10,
+  size: 10,
   total: 0,
   showSizeChanger: true,
   showQuickJumper: true,
@@ -177,6 +185,10 @@ const columns = [
   { title: '状态', dataIndex: 'status', key: 'status', width: 70, align: 'center' as const },
   { title: '操作', key: 'action', width: 140, fixed: 'right' as const }
 ]
+
+// 详情弹窗
+const detailVisible = ref(false)
+const detailRecord = ref<any>(null)
 
 // 弹窗相关
 const modalVisible = ref(false)
@@ -236,7 +248,7 @@ const handleReset = () => {
 
 // 导出
 const handleExport = () => {
-  message.success('导出功能开发中...')
+  exportComingSoon('客户数据')
 }
 
 // 分页
@@ -255,7 +267,8 @@ const handleAdd = () => {
 
 // 查看
 const handleView = (record: CustomerItem) => {
-  message.info(`查看 ${record.name} 详情`)
+  detailRecord.value = record
+  detailVisible.value = true
 }
 
 // 编辑

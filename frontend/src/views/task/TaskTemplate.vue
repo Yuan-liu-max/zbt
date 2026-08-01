@@ -111,10 +111,17 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { message, Modal } from 'ant-design-vue'
+
+const router = useRouter()
 import { PlusOutlined, SearchOutlined, DownOutlined } from '@ant-design/icons-vue'
-import type { TaskTemplate, TaskType, TemplateQueryParams } from '@/types/task'
-import { templateApi, taskTypeMap } from '@/api/mock/task'
+import type { TaskTemplate, TemplateQueryParams } from '@/types/task'
+import { templateApi } from '@/api/task'
+
+// 本地映射表
+type LocalTaskType = 'HUMAN' | 'PRODUCT' | 'SCENE' | 'COMPREHENSIVE'
+const taskTypeMap: Record<LocalTaskType, string> = { HUMAN: '人效', PRODUCT: '货品', SCENE: '场景', COMPREHENSIVE: '综合' }
 
 // 标签页
 const activeTab = ref<string>('all')
@@ -162,7 +169,7 @@ const editId = ref('')
 const formRef = ref()
 const formData = reactive({
   name: '',
-  type: undefined as TaskType | undefined
+  type: undefined as LocalTaskType | undefined
 })
 
 const formRules = {
@@ -171,7 +178,7 @@ const formRules = {
 }
 
 // 当前筛选类型
-const currentType = ref<TaskType | undefined>(undefined)
+const currentType = ref<LocalTaskType | undefined>(undefined)
 
 // 加载数据
 const loadData = async () => {
@@ -195,7 +202,7 @@ const loadData = async () => {
 
 // 标签页切换
 const handleTabChange = (key: string) => {
-  currentType.value = key === 'all' ? undefined : (key as TaskType)
+  currentType.value = key === 'all' ? undefined : (key as LocalTaskType)
   pagination.current = 1
   loadData()
 }
@@ -238,7 +245,7 @@ const handleEdit = (record: TaskTemplate) => {
 
 // 使用模板
 const handleUse = (record: TaskTemplate) => {
-  message.info(`使用模板：${record.name}`)
+  router.push(`/task/create?templateId=${record.id}`)
 }
 
 // 更多操作
@@ -248,7 +255,8 @@ const handleMoreAction = (action: string, record: TaskTemplate) => {
       handleCopy(record)
       break
     case 'export':
-      message.info(`导出模板：${record.name}`)
+      // TODO: P2-导出模板功能
+      message.info('导出模板功能即将上线')
       break
     case 'delete':
       handleDelete(record)

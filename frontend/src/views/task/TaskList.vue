@@ -23,7 +23,7 @@
         <a-form layout="inline" :model="searchForm" @finish="handleSearch">
           <a-form-item label="任务名称">
             <a-input
-              v-model:value="searchForm.name"
+              v-model:value="searchForm.keyword"
               placeholder="请输入任务名称"
               allow-clear
               style="width: 180px"
@@ -31,7 +31,7 @@
           </a-form-item>
           <a-form-item label="任务类型">
             <a-select
-              v-model:value="searchForm.type"
+              v-model:value="searchForm.dimension"
               placeholder="请选择"
               allow-clear
               style="width: 150px"
@@ -82,20 +82,15 @@
       >
         <template #bodyCell="{ column, record }">
           <!-- 任务类型 -->
-          <template v-if="column.key === 'type'">
-            {{ taskTypeMap[record.type as TaskType] }}
+          <template v-if="column.key === 'dimension'">
+            {{ taskTypeMap[record.dimension] || record.dimension }}
           </template>
 
           <!-- 优先级 -->
           <template v-if="column.key === 'priority'">
-            <a-tag :color="priorityMap[record.priority as TaskPriority].color">
-              {{ priorityMap[record.priority as TaskPriority].text }}
+            <a-tag :color="priorityMap[record.priority]?.color || 'default'">
+              {{ priorityMap[record.priority]?.text || record.priority }}
             </a-tag>
-          </template>
-
-          <!-- 参与人 -->
-          <template v-if="column.key === 'participants'">
-            {{ record.participants.join(', ') }}
           </template>
 
           <!-- 状态 -->
@@ -103,11 +98,6 @@
             <a-tag :color="taskStatusMap[record.status as TaskStatus].color">
               {{ taskStatusMap[record.status as TaskStatus].text }}
             </a-tag>
-          </template>
-
-          <!-- 进度 -->
-          <template v-if="column.key === 'progress'">
-            <a-progress :percent="record.progress" size="small" :stroke-color="record.progress === 100 ? '#52c41a' : '#1890ff'" />
           </template>
 
           <!-- 操作 -->
@@ -120,17 +110,17 @@
                   更多 <DownOutlined style="font-size: 10px" />
                 </a>
                 <template #overlay>
-                  <a-menu @click="({ key }) => handleMoreAction(key as string, record)">
+                  <a-menu @click="onMenuClick($event, record)">
                     <a-menu-item key="edit">
                       <EditOutlined /> 编辑
                     </a-menu-item>
                     <a-menu-item key="copy">
                       <CopyOutlined /> 复制
                     </a-menu-item>
-                    <a-menu-item v-if="record.status === 'in_progress'" key="complete">
+                    <a-menu-item v-if="record.status === 'IN_PROGRESS'" key="complete">
                       <CheckCircleOutlined /> 完成
                     </a-menu-item>
-                    <a-menu-item v-if="record.status === 'in_progress'" key="cancel">
+                    <a-menu-item v-if="record.status === 'IN_PROGRESS'" key="cancel">
                       <CloseCircleOutlined /> 取消
                     </a-menu-item>
                   </a-menu>
@@ -158,11 +148,11 @@
         :label-col="{ span: 6 }"
         :wrapper-col="{ span: 16 }"
       >
-        <a-form-item label="任务名称" name="name">
-          <a-input v-model:value="formData.name" placeholder="请输入任务名称" :maxlength="50" show-count />
+        <a-form-item label="任务名称" name="taskTitle">
+          <a-input v-model:value="formData.taskTitle" placeholder="请输入任务名称" :maxlength="50" show-count />
         </a-form-item>
-        <a-form-item label="任务类型" name="type">
-          <a-select v-model:value="formData.type" placeholder="请选择任务类型">
+        <a-form-item label="任务类型" name="dimension">
+          <a-select v-model:value="formData.dimension" placeholder="请选择任务类型">
             <a-select-option value="review">审核任务</a-select-option>
             <a-select-option value="approval">审批任务</a-select-option>
             <a-select-option value="process">流程任务</a-select-option>
@@ -176,16 +166,8 @@
             <a-select-option value="low">低</a-select-option>
           </a-select>
         </a-form-item>
-        <a-form-item label="负责人" name="assignee">
-          <a-input v-model:value="formData.assignee" placeholder="请输入负责人" />
-        </a-form-item>
-        <a-form-item label="参与人" name="participants">
-          <a-select
-            v-model:value="formData.participants"
-            mode="tags"
-            placeholder="输入后回车添加"
-            :token-separators="[',']"
-          />
+        <a-form-item label="负责人" name="assigneeName">
+          <a-input v-model:value="formData.assigneeName" placeholder="请输入负责人" />
         </a-form-item>
         <a-form-item label="开始时间" name="startTime">
           <a-date-picker
@@ -196,19 +178,23 @@
             style="width: 100%"
           />
         </a-form-item>
-        <a-form-item label="截止时间" name="endTime">
+        <a-form-item label="截止时间" name="dueTime">
           <a-date-picker
-            v-model:value="formData.endTime"
+            v-model:value="formData.dueTime"
             show-time
             value-format="YYYY-MM-DD HH:mm"
             placeholder="请选择截止时间"
             style="width: 100%"
           />
         </a-form-item>
-        <a-form-item label="任务描述" name="description" :label-col="{ span: 6 }" :wrapper-col="{ span: 16 }">
-          <a-textarea v-model:value="formData.description" :rows="4" placeholder="请输入任务描述" :maxlength="500" show-count />
-        </a-form-item>
       </a-form>
+    </a-modal>
+    <a-modal v-model:open="detailVisible" title="详情" :footer="null" width="600px">
+      <a-descriptions :column="2" bordered size="small">
+        <a-descriptions-item v-for="(val, key) in detailRecord" :key="key" :label="String(key)" :span="typeof val === 'object' ? 2 : 1">
+          {{ typeof val === 'object' ? JSON.stringify(val) : val }}
+        </a-descriptions-item>
+      </a-descriptions>
     </a-modal>
   </div>
 </template>
@@ -226,22 +212,40 @@ import {
   CheckCircleOutlined,
   CloseCircleOutlined
 } from '@ant-design/icons-vue'
-import type { TaskItem, TaskQueryParams, TaskStatus, TaskType, TaskPriority } from '@/types/task'
-import {
-  taskApi,
-  taskStatusMap,
-  taskTypeMap,
-  priorityMap
-} from '@/api/mock/task'
+import type { TaskItem, TaskStatus, TaskDimension, TaskPriority } from '@/types/task'
+import { taskApi } from '@/api/task'
 const router = useRouter()
+
+// 本地映射表
+const taskTypeMap: Record<string, string> = { HUMAN: '人效', PRODUCT: '货品', SCENE: '场景', COMPREHENSIVE: '综合' }
+const priorityMap: Record<string, { text: string; color: string }> = {
+  LOW: { text: '低', color: 'blue' },
+  MEDIUM: { text: '中', color: 'orange' },
+  HIGH: { text: '高', color: 'red' },
+  URGENT: { text: '紧急', color: 'magenta' },
+}
+const taskStatusMap: Record<string, { text: string; color: string }> = {
+  PENDING: { text: '待处理', color: 'default' },
+  READY: { text: '就绪', color: 'blue' },
+  IN_PROGRESS: { text: '进行中', color: 'processing' },
+  SUBMITTED: { text: '已提交', color: 'cyan' },
+  AUDITING: { text: '审核中', color: 'purple' },
+  APPROVED: { text: '已通过', color: 'green' },
+  COMPLETED: { text: '已完成', color: 'green' },
+  REJECTED: { text: '已拒绝', color: 'red' },
+  RECTIFYING: { text: '整改中', color: 'orange' },
+  OVERDUE: { text: '已逾期', color: 'red' },
+  CANCELLED: { text: '已取消', color: 'default' },
+  VOIDED: { text: '已作废', color: 'default' },
+}
 
 // 当前激活的标签页
 const activeTab = ref<string>('all')
 
 // 搜索表单
 const searchForm = reactive({
-  name: '',
-  type: undefined as TaskType | undefined,
+  keyword: '',
+  dimension: undefined as TaskDimension | undefined,
   assignee: '',
   dateRange: null as [string, string] | null
 })
@@ -251,7 +255,7 @@ const tableData = ref<TaskItem[]>([])
 const loading = ref(false)
 const pagination = reactive({
   current: 1,
-  pageSize: 10,
+  size: 10,
   total: 0,
   showSizeChanger: true,
   showQuickJumper: true,
@@ -260,17 +264,19 @@ const pagination = reactive({
 
 // 表格列配置
 const columns = computed(() => [
-  { title: '任务名称', dataIndex: 'name', key: 'name', width: 180, ellipsis: true },
-  { title: '任务类型', key: 'type', width: 100, align: 'center' as const },
+  { title: '任务名称', dataIndex: 'taskTitle', key: 'taskTitle', width: 180, ellipsis: true },
+  { title: '任务类型', key: 'dimension', width: 100, align: 'center' as const },
   { title: '优先级', key: 'priority', width: 80, align: 'center' as const },
-  { title: '负责人', dataIndex: 'assignee', key: 'assignee', width: 90 },
-  { title: '参与人', key: 'participants', width: 140, ellipsis: true },
+  { title: '负责人', dataIndex: 'assigneeName', key: 'assigneeName', width: 90 },
   { title: '开始时间', dataIndex: 'startTime', key: 'startTime', width: 150 },
-  { title: '截止时间', dataIndex: 'endTime', key: 'endTime', width: 150 },
+  { title: '截止时间', dataIndex: 'dueTime', key: 'dueTime', width: 150 },
   { title: '状态', key: 'status', width: 90, align: 'center' as const },
-  { title: '进度', key: 'progress', width: 120 },
   { title: '操作', key: 'action', width: 160, fixed: 'right' as const }
 ])
+
+// 详情弹窗
+const detailVisible = ref(false)
+const detailRecord = ref<any>(null)
 
 // 弹窗相关
 const modalVisible = ref(false)
@@ -279,42 +285,36 @@ const isEdit = ref(false)
 const formRef = ref()
 const formData = reactive({
   id: '',
-  name: '',
-  type: undefined as TaskType | undefined,
-  priority: 'medium' as TaskPriority,
-  assignee: '',
-  participants: [] as string[],
+  taskTitle: '',
+  dimension: undefined as TaskDimension | undefined,
+  priority: 'MEDIUM' as TaskPriority,
+  assigneeName: '',
   startTime: null as any,
-  endTime: null as any,
-  description: ''
+  dueTime: null as any
 })
 
 const formRules = {
-  name: [{ required: true, message: '请输入任务名称', trigger: 'blur' }],
-  type: [{ required: true, message: '请选择任务类型', trigger: 'change' }],
+  taskTitle: [{ required: true, message: '请输入任务名称', trigger: 'blur' }],
+  dimension: [{ required: true, message: '请选择任务类型', trigger: 'change' }],
   priority: [{ required: true, message: '请选择优先级', trigger: 'change' }],
-  assignee: [{ required: true, message: '请输入负责人', trigger: 'blur' }],
+  assigneeName: [{ required: true, message: '请输入负责人', trigger: 'blur' }],
   startTime: [{ required: true, message: '请选择开始时间', trigger: 'change' }],
-  endTime: [{ required: true, message: '请选择截止时间', trigger: 'change' }]
+  dueTime: [{ required: true, message: '请选择截止时间', trigger: 'change' }]
 }
 
 // 加载数据
 const loadData = async () => {
   loading.value = true
   try {
-    const params: TaskQueryParams = {
-      name: searchForm.name || undefined,
-      type: searchForm.type,
-      assignee: searchForm.assignee || undefined,
-      status: activeTab.value === 'all' ? undefined : activeTab.value as TaskStatus,
-      startDate: searchForm.dateRange?.[0] || undefined,
-      endDate: searchForm.dateRange?.[1] || undefined,
+    const params: any = {
+      keyword: searchForm.keyword || undefined,
+      dimension: searchForm.dimension,
       page: pagination.current,
       pageSize: pagination.pageSize
     }
-    const res = await taskApi.getList(params)
-    tableData.value = res.list
-    pagination.total = res.total
+    const res: any = await taskApi.getList(params)
+    tableData.value = res.list || []
+    pagination.total = res.total || 0
   } catch {
     message.error('加载数据失败')
   } finally {
@@ -336,8 +336,8 @@ const handleSearch = () => {
 
 // 重置
 const handleReset = () => {
-  searchForm.name = ''
-  searchForm.type = undefined
+  searchForm.keyword = ''
+  searchForm.dimension = undefined
   searchForm.assignee = ''
   searchForm.dateRange = null
   activeTab.value = 'all'
@@ -345,9 +345,9 @@ const handleReset = () => {
 }
 
 // 表格分页
-const handleTableChange = (pag: { current?: number; pageSize?: number }) => {
+const handleTableChange = (pag: any) => {
   pagination.current = pag.current || 1
-  pagination.pageSize = pag.pageSize || 10
+  pagination.pageSize = pag.size || 10
   loadData()
 }
 
@@ -358,22 +358,26 @@ const handleCreate = () => {
 
 // 查看详情
 const handleDetail = (record: TaskItem) => {
-  message.info(`查看详情: ${record.name}`)
+  detailRecord.value = record
+  detailVisible.value = true
 }
 
 // 编辑
 const handleEdit = (record: TaskItem) => {
   isEdit.value = true
-  formData.id = record.id
-  formData.name = record.name
-  formData.type = record.type
+  formData.id = String(record.id)
+  formData.taskTitle = record.taskTitle
+  formData.dimension = record.dimension
   formData.priority = record.priority
-  formData.assignee = record.assignee
-  formData.participants = [...record.participants]
+  formData.assigneeName = record.assigneeName
   formData.startTime = record.startTime
-  formData.endTime = record.endTime
-  formData.description = record.description || ''
+  formData.dueTime = record.dueTime
   modalVisible.value = true
+}
+
+// 菜单点击（避免模板内联解构导致 implicit any）
+const onMenuClick = (e: { key: string | number }, record: TaskItem) => {
+  handleMoreAction(String(e.key), record)
 }
 
 // 更多操作
@@ -383,14 +387,12 @@ const handleMoreAction = async (key: string, record: TaskItem) => {
   } else if (key === 'copy') {
     try {
       await taskApi.create({
-        name: `${record.name}（副本）`,
-        type: record.type,
+        taskTitle: `${record.taskTitle}（副本）`,
+        dimension: record.dimension,
         priority: record.priority,
-        assignee: record.assignee,
-        participants: [...record.participants],
-        startTime: record.startTime,
-        endTime: record.endTime,
-        description: record.description
+        assigneeName: record.assigneeName,
+        storeId: record.storeId,
+        dueTime: record.dueTime
       })
       message.success('复制成功')
       loadData()
@@ -399,7 +401,7 @@ const handleMoreAction = async (key: string, record: TaskItem) => {
     }
   } else if (key === 'complete') {
     try {
-      await taskApi.update(record.id, { status: 'completed', progress: 100 })
+      await taskApi.update(String(record.id), { status: 'COMPLETED' })
       message.success('任务已标记为完成')
       loadData()
     } catch {
@@ -407,7 +409,7 @@ const handleMoreAction = async (key: string, record: TaskItem) => {
     }
   } else if (key === 'cancel') {
     try {
-      await taskApi.update(record.id, { status: 'cancelled' })
+      await taskApi.update(String(record.id), { status: 'CANCELLED' })
       message.success('任务已取消')
       loadData()
     } catch {
@@ -422,15 +424,13 @@ const handleModalOk = async () => {
     await formRef.value?.validateFields()
     modalLoading.value = true
 
-    const submitData: Partial<TaskItem> = {
-      name: formData.name,
-      type: formData.type!,
+    const submitData: any = {
+      taskTitle: formData.taskTitle,
+      dimension: formData.dimension!,
       priority: formData.priority,
-      assignee: formData.assignee,
-      participants: formData.participants,
+      assigneeName: formData.assigneeName,
       startTime: formData.startTime,
-      endTime: formData.endTime,
-      description: formData.description
+      dueTime: formData.dueTime
     }
 
     if (isEdit.value) {
@@ -448,24 +448,6 @@ const handleModalOk = async () => {
   } finally {
     modalLoading.value = false
   }
-}
-
-// 重置表单
-const resetForm = () => {
-  formData.id = ''
-  formData.name = ''
-  formData.type = undefined
-  formData.priority = 'medium'
-  formData.assignee = ''
-  formData.participants = []
-  formData.startTime = null
-  formData.endTime = null
-  formData.description = ''
-}
-
-// 监听弹窗关闭，重置表单
-const handleModalCancel = () => {
-  resetForm()
 }
 
 onMounted(() => {

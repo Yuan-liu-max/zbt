@@ -82,6 +82,7 @@
           </template>
           <template v-if="column.key === 'action'">
             <a-space :size="4">
+              <a @click="handleDetail(record)" class="action-link">详情</a>
               <a @click="handleEdit(record)" class="action-link">编辑</a>
               <a-popconfirm
                 title="确定要删除该商品吗？"
@@ -186,6 +187,13 @@
         </a-form-item>
       </a-form>
     </a-modal>
+    <a-modal v-model:open="detailVisible" title="详情" :footer="null" width="600px">
+      <a-descriptions :column="2" bordered size="small">
+        <a-descriptions-item v-for="(val, key) in detailRecord" :key="key" :label="String(key)" :span="typeof val === 'object' ? 2 : 1">
+          {{ typeof val === 'object' ? JSON.stringify(val) : val }}
+        </a-descriptions-item>
+      </a-descriptions>
+    </a-modal>
   </div>
 </template>
 
@@ -194,7 +202,7 @@ import { ref, reactive, computed, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
 import { PlusOutlined } from '@ant-design/icons-vue'
 import type { GoodsItem, GoodsQueryParams, GoodsStatus } from '@/types/goods'
-import { goodsApi, brandApi, categoryApi, storeApi } from '@/api/mock/goods'
+import { goodsApi, brandApi, categoryApi, storeApi } from '@/api/goods'
 import type { BrandItem, GoodsCategory, StoreItem } from '@/types/goods'
 
 // 搜索表单
@@ -237,14 +245,18 @@ const columns = computed(() => {
   // }
 
   baseColumns.push(
-    { title: '库存', dataIndex: 'stock', key: 'stock', width: 80, align: 'center' as const },
-    { title: '状态', dataIndex: 'status', key: 'status', width: 80, align: 'center' as const },
+    { title: '库存', dataIndex: 'stock', key: 'stock', width: 80, align: 'right' as const },
+    { title: '状态', dataIndex: 'status', key: 'status', width: 80, align: 'right' as const },
     { title: '创建时间', dataIndex: 'createdAt', key: 'createdAt', width: 160 },
-    { title: '操作', key: 'action', width: 100, fixed: 'right' as const }
-  )
+    { title: '操作', key: 'action', width: 100 }
+  ) as any[]
 
   return baseColumns
 })
+
+// 详情弹窗
+const detailVisible = ref(false)
+const detailRecord = ref<any>(null)
 
 // 弹窗相关
 const modalVisible = ref(false)
@@ -377,7 +389,7 @@ const handleEdit = (record: GoodsItem) => {
   formData.name = record.name
   formData.categoryId = findCategoryPath(categoryTree.value, record.categoryId)
   formData.brandId = record.brandId
-  formData.price = record.price
+  formData.price = record.retailPrice
   formData.costPrice = record.costPrice
   formData.grossMarginRate = record.grossMarginRate
   formData.stock = record.stock
@@ -385,6 +397,12 @@ const handleEdit = (record: GoodsItem) => {
   formData.status = record.status
   formData.description = record.description || ''
   modalVisible.value = true
+}
+
+// 详情
+const handleDetail = (record: GoodsItem) => {
+  detailRecord.value = record
+  detailVisible.value = true
 }
 
 // 删除
@@ -421,7 +439,7 @@ const handleModalOk = async () => {
       categoryName: getCategoryName(formData.categoryId),
       brandId: formData.brandId,
       brandName: brand?.name || '',
-      price: formData.price,
+      retailPrice: formData.price,
       costPrice: formData.costPrice,
       grossMarginRate: formData.grossMarginRate,
       stock: formData.stock,
@@ -459,7 +477,7 @@ const resetForm = () => {
   formData.grossMarginRate = 0
   formData.stock = 0
   formData.storeId = ''
-  formData.status = 'on'
+  formData.status = 'ON_SALE'
   formData.description = ''
 }
 

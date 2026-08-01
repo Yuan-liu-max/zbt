@@ -65,13 +65,13 @@ const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
 
 // 提醒 API
 export const notificationApi = {
-  async getList(params: { tab?: string; page: number; pageSize: number }) {
+  async getList(params: { tab?: string; page: number; size: number }) {
     await delay(300)
     let filtered = [...mockNotifications]
     if (params.tab === 'unread') filtered = filtered.filter(item => !item.isRead)
     if (params.tab === 'read') filtered = filtered.filter(item => item.isRead)
-    const start = (params.page - 1) * params.pageSize
-    return { list: filtered.slice(start, start + params.pageSize), total: filtered.length }
+    const start = (params.page - 1) * params.size
+    return { list: filtered.slice(start, start + params.size), total: filtered.length }
   },
   async markAllRead() {
     await delay(300)

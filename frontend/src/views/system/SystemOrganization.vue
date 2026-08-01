@@ -116,7 +116,7 @@ import { ref, reactive, computed, onMounted, h, defineComponent } from 'vue'
 import { message, type FormInstance } from 'ant-design-vue'
 import { PlusOutlined, SearchOutlined, DownloadOutlined } from '@ant-design/icons-vue'
 import type { OrgNode } from '@/types/system'
-import { orgApi } from '@/api/mock/system'
+import { orgApi } from '@/api/system'
 
 // ==================== 组织架构图表节点组件 ====================
 const OrgChartNode = defineComponent({

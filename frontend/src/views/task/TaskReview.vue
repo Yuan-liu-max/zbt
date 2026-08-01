@@ -133,6 +133,13 @@
         </a-form>
       </div>
     </a-modal>
+    <a-modal v-model:open="detailVisible" title="详情" :footer="null" width="600px">
+      <a-descriptions :column="2" bordered size="small">
+        <a-descriptions-item v-for="(val, key) in detailRecord" :key="key" :label="String(key)" :span="typeof val === 'object' ? 2 : 1">
+          {{ typeof val === 'object' ? JSON.stringify(val) : val }}
+        </a-descriptions-item>
+      </a-descriptions>
+    </a-modal>
   </div>
 </template>
 
@@ -141,7 +148,7 @@ import { ref, reactive, onMounted, onUnmounted } from 'vue'
 import { message } from 'ant-design-vue'
 import { SearchOutlined } from '@ant-design/icons-vue'
 import type { TaskReviewItem, TaskType, ReviewQueryParams } from '@/types/task'
-import { reviewApi, taskTypeMap, reviewStatusMap } from '@/api/mock/task'
+import { reviewApi, taskTypeMap, reviewStatusMap } from '@/api/task'
 
 // 当前标签页
 const activeTab = ref('pending')
@@ -159,7 +166,7 @@ const tableData = ref<TaskReviewItem[]>([])
 const loading = ref(false)
 const pagination = reactive({
   current: 1,
-  pageSize: 10,
+  size: 10,
   total: 0,
   showSizeChanger: true,
   showQuickJumper: true,
@@ -192,6 +199,10 @@ const getColumnsValue = () => {
 }
 
 const columns = ref(getColumnsValue())
+
+// 详情弹窗
+const detailVisible = ref(false)
+const detailRecord = ref<any>(null)
 
 // 审查弹窗
 const reviewModalVisible = ref(false)
@@ -252,7 +263,8 @@ const handleTableChange = (pag: any) => {
 
 // 查看
 const handleView = (record: TaskReviewItem) => {
-  message.info(`查看任务：${record.name}`)
+  detailRecord.value = record
+  detailVisible.value = true
 }
 
 // 审查

@@ -94,15 +94,23 @@
         </a-form-item>
       </a-form>
     </a-modal>
+    <a-modal v-model:open="detailVisible" title="详情" :footer="null" width="600px">
+      <a-descriptions :column="2" bordered size="small">
+        <a-descriptions-item v-for="(val, key) in detailRecord" :key="key" :label="String(key)" :span="typeof val === 'object' ? 2 : 1">
+          {{ typeof val === 'object' ? JSON.stringify(val) : val }}
+        </a-descriptions-item>
+      </a-descriptions>
+    </a-modal>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
+import request from '@/utils/request'
 import { message } from 'ant-design-vue'
 import { PlusOutlined, SearchOutlined } from '@ant-design/icons-vue'
 import type { PerformanceItem, HumanQueryParams, ReviewType } from '@/types/human'
-import { performanceApi, performanceStatusMap } from '@/api/mock/human'
+import { performanceApi, performanceStatusMap } from '@/api/human'
 
 // 搜索表单
 const searchForm = reactive({
@@ -128,6 +136,10 @@ const columns = [
   { title: '操作', key: 'action', width: 120, fixed: 'right' as const }
 ]
 
+// 详情弹窗
+const detailVisible = ref(false)
+const detailRecord = ref<any>(null)
+
 // 弹窗相关
 const modalVisible = ref(false)
 const modalLoading = ref(false)
@@ -144,7 +156,7 @@ const loadData = async () => {
   loading.value = true
   try {
     const params: HumanQueryParams = {
-      keyword: searchForm.topic || searchForm.assignee || undefined,
+      keyword: searchForm.assignee || undefined,
       type: searchForm.type,
       status: searchForm.status,
       page: pagination.current, pageSize: pagination.pageSize
@@ -158,8 +170,20 @@ const handleSearch = () => { pagination.current = 1; loadData() }
 const handleReset = () => { searchForm.period = ''; searchForm.type = undefined; searchForm.status = undefined; searchForm.assignee = ''; handleSearch() }
 const handleTableChange = (pag: any) => { pagination.current = pag.current; pagination.pageSize = pag.pageSize; loadData() }
 const handleAdd = () => { resetForm(); modalVisible.value = true }
-const handleView = (record: PerformanceItem) => { message.info(`查看 ${record.topic} 详情`) }
-const handleReport = (record: PerformanceItem) => { message.info(`查看 ${record.topic} 报告`) }
+const handleView = (record: PerformanceItem) => { detailRecord.value = record; detailVisible.value = true }
+// TODO: 报告功能待实现（需要单独的报告详情页）
+const reportVisible = ref(false)
+const reportData = ref<any>(null)
+
+const handleReport = async (_record: PerformanceItem) => {
+  try {
+    const data = await request.get(`/sales/metrics/employee/${record.id}?month=2024-05`)
+    reportData.value = data
+    reportVisible.value = true
+  } catch {
+    message.info('报告功能开发中...')
+  }
+}
 
 const handleModalOk = async () => {
   try {

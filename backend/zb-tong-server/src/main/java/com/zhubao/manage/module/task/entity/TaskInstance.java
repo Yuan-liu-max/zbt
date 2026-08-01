@@ -39,6 +39,9 @@ public class TaskInstance {
     @TableField(fill = FieldFill.INSERT)
     @TableLogic private Integer isDeleted;
 
+    @TableField(exist = false) private String assigneeName;
+    @TableField(exist = false) private String auditorName;
+
     private LocalDateTime createdAt;
 
     @TableField(fill = FieldFill.INSERT_UPDATE)

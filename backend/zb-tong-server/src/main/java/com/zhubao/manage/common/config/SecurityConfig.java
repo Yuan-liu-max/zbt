@@ -37,8 +37,8 @@ public class SecurityConfig {
                 .antMatchers("/auth/login").permitAll()
                 // ---- 静态资源 + 健康检查 ----
                 .antMatchers("/static/**", "/public/**", "/actuator/health").permitAll()
-                // ---- 其余全部需要认证（由 AuthInterceptor + @PreAuthorize 双重校验） ----
-                .anyRequest().authenticated()
+                // ---- 其余放行，由 AuthInterceptor(JWT) + @PreAuthorize(角色) 双重校验 ----
+                .anyRequest().permitAll()
                 .and()
                 .formLogin().disable()
                 .httpBasic().disable()

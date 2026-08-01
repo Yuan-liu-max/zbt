@@ -64,14 +64,14 @@ export const activityApi = {
       filtered = filtered.filter(item => item.type === params.type)
     }
 
-    const start = (params.page - 1) * params.pageSize
-    const end = start + params.pageSize
+    const start = (params.page - 1) * params.size
+    const end = start + params.size
 
     return {
       list: filtered.slice(start, end),
       total: filtered.length,
       page: params.page,
-      pageSize: params.pageSize
+      size: params.size
     }
   },
 
@@ -130,14 +130,14 @@ export const promotionApi = {
       filtered = filtered.filter(item => item.type === params.type)
     }
 
-    const start = (params.page - 1) * params.pageSize
-    const end = start + params.pageSize
+    const start = (params.page - 1) * params.size
+    const end = start + params.size
 
     return {
       list: filtered.slice(start, end),
       total: filtered.length,
       page: params.page,
-      pageSize: params.pageSize
+      size: params.size
     }
   },
 

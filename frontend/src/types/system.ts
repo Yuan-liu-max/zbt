@@ -3,26 +3,33 @@
 // 组织节点
 export interface OrgNode {
   id: string
-  name: string
+  orgName: string
   parentId: string | null
-  level: number
-  memberCount: number
+  orgType: string
+  sortOrder: number
+  status: string
   children?: OrgNode[]
 }
 
-// 门店状态
-export type StoreStatus = 'open' | 'suspended'
+// 门店状态（全大写）
+export type StoreStatus = 'OPEN' | 'SUSPENDED' | 'CLOSED'
+
+// 门店类型（全大写）
+export type StoreType = 'NEW' | 'OLD' | 'FLAGSHIP' | 'NORMAL'
 
 // 门店信息
 export interface StoreItem {
-  id: string
-  name: string
-  code: string
-  region: string
+  storeId: string
+  storeName: string
+  storeCode: string
+  regionId: string
   address: string
-  contactPerson: string
-  contactPhone: string
+  storeManagerId: string
+  openingDate: string
+  storeType: StoreType
   status: StoreStatus
+  businessHours: string
+  contactPhone: string
 }
 
 // 用户状态

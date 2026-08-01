@@ -10,8 +10,8 @@ import com.zhubao.manage.module.human.mapper.*;
 import com.zhubao.manage.module.human.service.HumanService;
 import javax.validation.Valid;
 import io.swagger.annotations.Api;
-import javax.validation.Valid;
 import io.swagger.annotations.ApiOperation;
+import org.apache.commons.lang3.StringUtils;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -31,14 +31,15 @@ public class HumanController {
     private final EmployeeTrainingRecordMapper trainingRecordMapper;
     private final EmployeeMonthlyReviewMapper monthlyReviewMapper;
     private final EmployeeLevelRecordMapper levelRecordMapper;
+    private final MeetingMapper meetingMapper;
 
     public HumanController(HumanService svc, EmployeeProfileMapper p, EmployeeInterviewMapper i,
                            EmployeeAssessmentMapper a, EmployeeTrainingMapper t,
                            EmployeeTrainingRecordMapper tr, EmployeeMonthlyReviewMapper mr,
-                           EmployeeLevelRecordMapper lr) {
+                           EmployeeLevelRecordMapper lr, MeetingMapper mm) {
         this.svc = svc; this.profileMapper = p; this.interviewMapper = i;
         this.assessmentMapper = a; this.trainingMapper = t; this.trainingRecordMapper = tr;
-        this.monthlyReviewMapper = mr; this.levelRecordMapper = lr;
+        this.monthlyReviewMapper = mr; this.levelRecordMapper = lr; this.meetingMapper = mm;
     }
 
     // ===== 聚合档案 =====
@@ -96,4 +97,33 @@ public class HumanController {
     public ApiResult<List<EmployeeLevelRecord>> listLevels() { return ApiResult.ok(svc.all(levelRecordMapper, new LambdaQueryWrapper<>())); }
     @ApiOperation("新增分层") @PostMapping("/level-records")
     public ApiResult<Void> createLevel(@Valid @RequestBody EmployeeLevelRecord e) { svc.save(levelRecordMapper, e); return ApiResult.ok(); }
+
+    // ===== 晨夕会 Meetings =====
+    @ApiOperation("会议分页列表")
+    @GetMapping("/meetings")
+    public ApiResult<PageResult<Meeting>> pageMeetings(@Valid PageDTO dto,
+            @RequestParam(required = false) String meetingType,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String startDate,
+            @RequestParam(required = false) String endDate,
+            @RequestParam(required = false) String keyword) {
+        LambdaQueryWrapper<Meeting> w = new LambdaQueryWrapper<>();
+        if (StringUtils.isNotBlank(meetingType)) w.eq(Meeting::getType, meetingType);
+        if (StringUtils.isNotBlank(status)) w.eq(Meeting::getStatus, status);
+        if (StringUtils.isNotBlank(startDate)) w.ge(Meeting::getMeetingDate, startDate);
+        if (StringUtils.isNotBlank(endDate)) w.le(Meeting::getMeetingDate, endDate);
+        if (StringUtils.isNotBlank(keyword)) w.like(Meeting::getTopic, keyword);
+        w.orderByDesc(Meeting::getCreatedAt);
+        IPage<Meeting> p = svc.page(meetingMapper, dto, w);
+        return ApiResult.ok(PageResult.of(p));
+    }
+
+    @ApiOperation("新建会议") @PostMapping("/meetings")
+    public ApiResult<Void> createMeeting(@Valid @RequestBody Meeting m) { svc.save(meetingMapper, m); return ApiResult.ok(); }
+
+    @ApiOperation("更新会议") @PutMapping("/meetings/{id}")
+    public ApiResult<Void> updateMeeting(@PathVariable Long id, @Valid @RequestBody Meeting m) { m.setId(id); svc.update(meetingMapper, m); return ApiResult.ok(); }
+
+    @ApiOperation("会议详情") @GetMapping("/meetings/{id}")
+    public ApiResult<Meeting> getMeeting(@PathVariable Long id) { return ApiResult.ok(svc.get(meetingMapper, id, "会议")); }
 }

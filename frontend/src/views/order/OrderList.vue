@@ -155,7 +155,7 @@ import { useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import { SearchOutlined } from '@ant-design/icons-vue'
 import type { OrderRecord, OrderQueryParams, OrderStatus } from '@/types/order'
-import { orderApi, orderStatusMap } from '@/api/mock/order'
+import { orderApi, orderStatusMap } from '@/api/order'
 
 const router = useRouter()
 
@@ -176,7 +176,10 @@ const loading = ref(false)
 const pagination = reactive({
   current: 1,
   pageSize: 10,
-  total: 0
+  total: 0,
+  showSizeChanger: true,
+  showQuickJumper: true,
+  showTotal: (total: number) => `共 ${total} 条`
 })
 
 // 监听标签页切换
@@ -276,7 +279,7 @@ const handleConfirm = async (order: OrderRecord) => {
 
 // 再次购买
 const handleRepurchase = (order: OrderRecord) => {
-  message.info('跳转到商品页面...')
+  router.push('/goods/list')
 }
 
 onMounted(() => {

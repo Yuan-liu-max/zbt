@@ -186,7 +186,7 @@ WHERE status = 'ENABLED'
 -- ==================== 5. 默认管理员账号 ====================
 -- 用户名: admin  密码: admin123  (BCrypt加密)
 INSERT IGNORE INTO `sys_user` (`id`, `username`, `password_hash`, `real_name`, `phone`, `status`, `is_deleted`) VALUES
-(1, 'admin', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iAt6Z5Eh', '系统管理员', '13800000000', 'ACTIVE', 0);
+(1, 'admin', '$2b$10$BLVuYbMyQWZFLS3i1cBGo.ziBfANuXogm4BXvkqGjra/los2Kn1z6', '系统管理员', '13800000000', 'ACTIVE', 0);
 
 -- 管理员绑定系统管理员角色
 INSERT IGNORE INTO `sys_user_role` (`user_id`, `role_id`) VALUES (1, 1);

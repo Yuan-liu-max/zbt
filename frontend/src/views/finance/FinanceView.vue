@@ -150,19 +150,19 @@
 
         <!-- 其他标签页占位 -->
         <a-tab-pane key="receivable" tab="应收账款">
-          <a-empty description="应收账款功能开发中..." />
+          <a-empty description="应收账款功能即将上线" />
         </a-tab-pane>
         <a-tab-pane key="payable" tab="应付账款">
-          <a-empty description="应付账款功能开发中..." />
+          <a-empty description="应付账款功能即将上线" />
         </a-tab-pane>
         <a-tab-pane key="account" tab="账户管理">
-          <a-empty description="账户管理功能开发中..." />
+          <a-empty description="账户管理功能即将上线" />
         </a-tab-pane>
         <a-tab-pane key="expense" tab="费用管理">
-          <a-empty description="费用管理功能开发中..." />
+          <a-empty description="费用管理功能即将上线" />
         </a-tab-pane>
         <a-tab-pane key="invoice" tab="发票管理">
-          <a-empty description="发票管理功能开发中..." />
+          <a-empty description="发票管理功能即将上线" />
         </a-tab-pane>
       </a-tabs>
     </div>
@@ -210,6 +210,13 @@
         </a-form-item>
       </a-form>
     </a-modal>
+    <a-modal v-model:open="detailVisible" title="详情" :footer="null" width="600px">
+      <a-descriptions :column="2" bordered size="small">
+        <a-descriptions-item v-for="(val, key) in detailRecord" :key="key" :label="String(key)" :span="typeof val === 'object' ? 2 : 1">
+          {{ typeof val === 'object' ? JSON.stringify(val) : val }}
+        </a-descriptions-item>
+      </a-descriptions>
+    </a-modal>
   </div>
 </template>
 
@@ -218,7 +225,8 @@ import { ref, reactive, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
 import { PlusOutlined, DollarOutlined, DownloadOutlined, RiseOutlined, AccountBookOutlined, CreditCardOutlined } from '@ant-design/icons-vue'
 import type { FinanceStats, TransactionRecord, TransactionQueryParams, TransactionType } from '@/types/finance'
-import { financeApi } from '@/api/mock/finance'
+import { financeApi } from '@/api/finance'
+import { exportComingSoon } from '@/utils/export'
 
 // 当前标签页
 const activeTab = ref('transaction')
@@ -243,7 +251,7 @@ const tableData = ref<TransactionRecord[]>([])
 const loading = ref(false)
 const pagination = reactive({
   current: 1,
-  pageSize: 10,
+  size: 10,
   total: 0,
   showSizeChanger: true,
   showQuickJumper: true,
@@ -261,6 +269,10 @@ const columns = [
   { title: '备注', dataIndex: 'remark', key: 'remark', width: 180 },
   { title: '操作', key: 'action', width: 140, fixed: 'right' as const }
 ]
+
+// 详情弹窗
+const detailVisible = ref(false)
+const detailRecord = ref<any>(null)
 
 // 弹窗相关
 const modalVisible = ref(false)
@@ -336,7 +348,7 @@ const handleReset = () => {
 
 // 导出
 const handleExport = () => {
-  message.success('导出功能开发中...')
+  exportComingSoon('财务数据')
 }
 
 // 分页
@@ -355,7 +367,8 @@ const handleAdd = () => {
 
 // 查看
 const handleView = (record: TransactionRecord) => {
-  message.info(`查看 ${record.code} 详情`)
+  detailRecord.value = record
+  detailVisible.value = true
 }
 
 // 编辑

@@ -115,7 +115,7 @@ import { ref, reactive, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
 import { PlusOutlined } from '@ant-design/icons-vue'
 import type { RoleItem } from '@/types/system'
-import { roleApi } from '@/api/mock/system'
+import { roleApi } from '@/api/system'
 
 // 角色列表
 const roleList = ref<RoleItem[]>([])

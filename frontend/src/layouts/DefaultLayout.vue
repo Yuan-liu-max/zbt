@@ -188,14 +188,14 @@
             />
 
             <!-- 通知图标 -->
-            <a-badge :count="12" :offset="[-4, 4]">
+            <a-badge :count="unreadCount" :offset="[-4, 4]">
               <a-button type="text" shape="circle" @click="router.push('/notify')">
                 <BellOutlined style="font-size: 18px" />
               </a-button>
             </a-badge>
 
             <!-- 邮件图标 -->
-            <a-badge :count="5" :offset="[-4, 4]">
+            <a-badge :count="mailUnread" :offset="[-4, 4]">
               <a-button type="text" shape="circle" @click="router.push('/message')">
                 <MailOutlined style="font-size: 18px" />
               </a-button>
@@ -207,7 +207,7 @@
                 <a-avatar :size="32" style="background-color: #c8a44d">
                   <template #icon><UserOutlined /></template>
                 </a-avatar>
-                <span v-if="!isSmallScreen" class="header-username">{{ userInfo.username }}</span>
+                <span v-if="!isSmallScreen" class="header-username">{{ userInfo.name || userInfo.username }}</span>
                 <DownOutlined v-if="!isSmallScreen" style="font-size: 12px; margin-left: 4px" />
               </div>
               <template #overlay>
@@ -253,6 +253,8 @@ import { ref, computed, watch, onMounted, onUnmounted, type Component as VueComp
 import { useRouter, useRoute } from 'vue-router'
 import { message } from 'ant-design-vue'
 import { menuRoutes } from '@/router'
+import { useAuthStore } from '@/stores/useAuthStore'
+import { notificationApi } from '@/api/notification'
 import {
   HomeOutlined,
   ShoppingOutlined,
@@ -291,23 +293,28 @@ const openKeys = ref<string[]>([])
 
 const router = useRouter()
 const route = useRoute()
+const authStore = useAuthStore()
+
+// 通知未读数
+const unreadCount = ref(0)
+// 邮件未读数（暂无后端接口，先静态置 0）
+const mailUnread = ref(0)
+
+const fetchUnreadCount = async () => {
+  try {
+    const res: any = await notificationApi.getUnreadCount()
+    unreadCount.value = res?.count ?? res?.unreadCount ?? 0
+  } catch {
+    // 静默失败，不影响页面
+  }
+}
 
 /* ---------- 用户信息 ---------- */
-const userInfo = ref({ username: '管理员', role: '超级管理员' })
-
-const loadUserInfo = () => {
-  try {
-    const stored = localStorage.getItem('userInfo')
-    if (stored) {
-      userInfo.value = JSON.parse(stored)
-    }
-  } catch {}
-}
+const userInfo = computed(() => authStore.userInfo || { username: '管理员', name: '管理员' })
 
 const handleUserMenuClick = ({ key }: { key: string }) => {
   if (key === 'logout') {
-    localStorage.removeItem('token')
-    localStorage.removeItem('userInfo')
+    authStore.logout()
     message.success('已退出登录')
     router.push('/login')
   } else if (key === 'profile') {
@@ -405,10 +412,20 @@ const checkScreen = () => {
   isSmallScreen.value = window.innerWidth < 992
 }
 
+// 定时器引用
+let unreadTimer: ReturnType<typeof setInterval> | null = null
+
 onMounted(() => {
   checkScreen()
-  loadUserInfo()
+  fetchUnreadCount()
+  // 每60秒刷新未读数
+  unreadTimer = setInterval(fetchUnreadCount, 60000)
   window.addEventListener('resize', checkScreen)
+})
+
+onUnmounted(() => {
+  if (unreadTimer) clearInterval(unreadTimer)
+  window.removeEventListener('resize', checkScreen)
 })
 
 onUnmounted(() => {

@@ -73,7 +73,7 @@
       <div class="content-card chart-card">
         <div class="chart-header">
           <span class="chart-title">销售趋势</span>
-          <a-segmented v-model:value="trendType" :options="trendOptions" size="small" />
+          <a-segmented :options="['按天', '按周', '按月']" size="small" />
         </div>
         <div class="chart-legend">
           <span class="legend-item"><span class="legend-dot" style="background:#1890ff" /> 销售额（元）</span>
@@ -165,13 +165,12 @@ import {
   TransactionOutlined, RiseOutlined
 } from '@ant-design/icons-vue'
 import type { ReportStats, SalesTrend, ChannelStats, RankingItem } from '@/types/report'
-import { reportApi } from '@/api/mock/report'
+import { reportApi } from '@/api/report'
+import { exportReportScores } from '@/utils/export'
 
 // 标签页
-const activeTab = ref('overview')
 const rankingTab = ref('product')
 const trendType = ref('按天')
-const trendOptions = ['按天', '按周', '按月']
 
 // 筛选条件
 const dateRange = ref<any>(null)
@@ -205,25 +204,25 @@ const getBarHeight = (value: number) => {
 }
 
 // 导出
-const handleExport = () => {
-  message.success('导出报表功能开发中...')
+const handleExport = async () => {
+  // 获取当前选中的月份，默认当月
+  const now = new Date()
+  const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+  await exportReportScores(month)
 }
 
 // 加载数据
 const loadData = async () => {
   try {
-    const [stats, trend, channel, ranking] = await Promise.all([
-      reportApi.getStats(),
-      reportApi.getSalesTrend(),
-      reportApi.getChannelStats(),
-      reportApi.getProductRanking()
-    ])
-    Object.assign(reportStats, stats)
-    salesTrend.value = trend
-    channelStats.value = channel
-    productRanking.value = ranking
-  } catch (error) {
-    console.error('加载数据失败', error)
+    const dashboard: any = await reportApi.getDashboard()
+    if (dashboard) {
+      if (dashboard.kpis) Object.assign(reportStats, dashboard.kpis)
+      if (dashboard.salesTrend) salesTrend.value = dashboard.salesTrend
+      if (dashboard.channelStats) channelStats.value = dashboard.channelStats
+      if (dashboard.ranking) productRanking.value = dashboard.ranking
+    }
+  } catch {
+    console.warn('加载 dashboard 数据失败，使用默认数据')
   }
 }
 

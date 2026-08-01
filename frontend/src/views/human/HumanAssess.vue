@@ -13,7 +13,7 @@
       <a-form layout="inline" :model="searchForm" @finish="handleSearch">
         <a-form-item label="考核周期">
           <a-select
-            v-model:value="searchForm.period"
+            v-model:value="searchForm.assessmentWeek"
             placeholder="请选择"
             allow-clear
             style="width: 180px"
@@ -119,7 +119,7 @@
           <a-input v-model:value="formData.name" placeholder="请输入考核名称" />
         </a-form-item>
         <a-form-item label="考核周期" name="period">
-          <a-input v-model:value="formData.period" placeholder="请输入考核周期，如 2026-04-01 ~ 2026-06-30" />
+          <a-input v-model:value="formData.assessmentWeek" placeholder="请输入考核周期，如 2026-04-01 ~ 2026-06-30" />
         </a-form-item>
         <a-form-item label="考核类型" name="type">
           <a-select v-model:value="formData.type" placeholder="请选择考核类型">
@@ -141,15 +141,28 @@
         </a-form-item>
       </a-form>
     </a-modal>
+    <a-modal v-model:open="detailVisible" title="详情" :footer="null" width="600px">
+      <a-descriptions :column="2" bordered size="small">
+        <a-descriptions-item v-for="(val, key) in detailRecord" :key="key" :label="String(key)" :span="typeof val === 'object' ? 2 : 1">
+          {{ typeof val === 'object' ? JSON.stringify(val) : val }}
+        </a-descriptions-item>
+      </a-descriptions>
+    </a-modal>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
-import { PlusOutlined, SearchOutlined, DownOutlined } from '@ant-design/icons-vue'
-import type { AssessItem, AssessType, AssessStatus } from '@/types/human'
-import { assessApi, assessStatusMap } from '@/api/mock/human'
+import { PlusOutlined, SearchOutlined } from '@ant-design/icons-vue'
+import type { AssessItem, AssessType } from '@/types/human'
+import { assessApi } from '@/api/human'
+
+// 考核状态映射（本地定义）
+const assessStatusMap: Record<string, { text: string; color: string }> = {
+  ongoing: { text: '进行中', color: 'green' },
+  ended: { text: '已结束', color: 'default' },
+}
 
 // 考核类型映射
 const assessTypeMap: Record<string, string> = {
@@ -169,9 +182,9 @@ const periodOptions = [
 
 // 搜索表单
 const searchForm = reactive({
-  period: undefined as string | undefined,
+  assessmentWeek: undefined as string | undefined,
   type: undefined as AssessType | undefined,
-  status: undefined as AssessStatus | undefined,
+  status: undefined as string | undefined,
   assessor: ''
 })
 
@@ -187,9 +200,6 @@ const pagination = reactive({
   showTotal: (total: number) => `共 ${total} 条`
 })
 
-// 全量数据（用于前端筛选）
-const allData = ref<AssessItem[]>([])
-
 // 表格列配置
 const columns = [
   { title: '考核名称', dataIndex: 'name', key: 'name', width: 200 },
@@ -201,13 +211,17 @@ const columns = [
   { title: '操作', key: 'action', width: 120, fixed: 'right' as const }
 ]
 
+// 详情弹窗
+const detailVisible = ref(false)
+const detailRecord = ref<any>(null)
+
 // 弹窗相关
 const modalVisible = ref(false)
 const modalLoading = ref(false)
 const formRef = ref()
 const formData = reactive({
   name: '',
-  period: '',
+  assessmentWeek: '',
   type: 'monthly' as AssessType,
   assessor: '',
   participants: 0
@@ -227,12 +241,12 @@ const loadData = async () => {
   try {
     const params = {
       keyword: searchForm.assessor || undefined,
-      page: 1,
-      pageSize: 100
+      page: pagination.current,
+      pageSize: pagination.pageSize
     }
     const res = await assessApi.getList(params)
-    allData.value = res.list
-    applyFilter()
+    tableData.value = res.list
+    loadData()
   } catch (error) {
     message.error('加载数据失败')
   } finally {
@@ -241,59 +255,26 @@ const loadData = async () => {
 }
 
 // 前端筛选
-const applyFilter = () => {
-  let filtered = [...allData.value]
-
-  if (searchForm.type) {
-    filtered = filtered.filter(item => item.type === searchForm.type)
-  }
-  if (searchForm.status) {
-    filtered = filtered.filter(item => item.status === searchForm.status)
-  }
-  if (searchForm.assessor) {
-    filtered = filtered.filter(item => item.assessor.includes(searchForm.assessor))
-  }
-  if (searchForm.period) {
-    // 按周期关键词模糊匹配
-    const keyword = searchForm.period.toLowerCase()
-    filtered = filtered.filter(item => {
-      const periodLower = item.period.toLowerCase()
-      // 匹配季度
-      if (keyword.includes('q1') && periodLower.includes('01-01') && periodLower.includes('03-31')) return true
-      if (keyword.includes('q2') && periodLower.includes('04-01') && periodLower.includes('06-30')) return true
-      // 匹配月份 (如 2026-06)
-      const monthMatch = keyword.match(/(\d{4})-(\d{2})$/)
-      if (monthMatch && periodLower.includes(monthMatch[1]) && periodLower.includes(monthMatch[2])) return true
-      return false
-    })
-  }
-
-  pagination.total = filtered.length
-  const start = (pagination.current - 1) * pagination.pageSize
-  tableData.value = filtered.slice(start, start + pagination.pageSize)
-}
-
-// 搜索
 const handleSearch = () => {
   pagination.current = 1
-  applyFilter()
+  loadData()
 }
 
 // 重置
 const handleReset = () => {
-  searchForm.period = undefined
+  searchForm.assessmentWeek = undefined
   searchForm.type = undefined
   searchForm.status = undefined
   searchForm.assessor = ''
   pagination.current = 1
-  applyFilter()
+  loadData()
 }
 
 // 分页
 const handleTableChange = (pag: any) => {
   pagination.current = pag.current
   pagination.pageSize = pag.pageSize
-  applyFilter()
+  loadData()
 }
 
 // 新建
@@ -304,12 +285,49 @@ const handleAdd = () => {
 
 // 查看
 const handleView = (record: AssessItem) => {
-  message.info(`查看考核：${record.name}`)
+  detailRecord.value = record
+  detailVisible.value = true
 }
 
-// 评分
-const handleScore = (record: AssessItem) => {
-  message.info(`评分考核：${record.name}`)
+// 5维度评分弹窗
+const scoreVisible = ref(false)
+const scoreRecord = ref<AssessItem | null>(null)
+const scoreForm = reactive({
+  productKnowledge: 0,
+  matchingSkill: 0,
+  reception: 0,
+  objectionHandling: 0,
+  promotionScript: 0
+})
+const totalScore = computed(() => {
+  return scoreForm.productKnowledge + scoreForm.matchingSkill +
+    scoreForm.reception + scoreForm.objectionHandling + scoreForm.promotionScript
+})
+
+const handleScore = (item: AssessItem) => {
+  scoreRecord.value = item
+  scoreForm.productKnowledge = 0
+  scoreForm.matchingSkill = 0
+  scoreForm.reception = 0
+  scoreForm.objectionHandling = 0
+  scoreForm.promotionScript = 0
+  scoreVisible.value = true
+}
+
+const handleScoreOk = async () => {
+  try {
+    await assessApi.update(scoreRecord.value!.id, {
+      productKnowledgeScore: scoreForm.productKnowledge,
+      matchingSkillScore: scoreForm.matchingSkill,
+      receptionScore: scoreForm.reception,
+      objectionHandlingScore: scoreForm.objectionHandling,
+      promotionScriptScore: scoreForm.promotionScript,
+      totalScore: totalScore.value
+    })
+    message.success('评分已提交')
+    scoreVisible.value = false
+    loadData()
+  } catch { message.error('评分提交失败') }
 }
 
 // 弹窗确认
@@ -320,7 +338,7 @@ const handleModalOk = async () => {
 
     await assessApi.create({
       name: formData.name,
-      period: formData.period,
+      assessmentWeek: formData.assessmentWeek,
       type: formData.type,
       assessor: formData.assessor,
       participants: formData.participants
@@ -339,7 +357,7 @@ const handleModalOk = async () => {
 // 重置表单
 const resetForm = () => {
   formData.name = ''
-  formData.period = ''
+  formData.assessmentWeek = ''
   formData.type = 'monthly'
   formData.assessor = ''
   formData.participants = 0
