@@ -8,13 +8,6 @@ export interface FinanceStats {
   totalIncome: number        // 总收入
   totalExpense: number       // 总支出
   netProfit: number          // 净利润
-  receivable: number         // 应收账款
-  payable: number            // 应付账款
-  incomeChange: number       // 收入变化百分比
-  expenseChange: number      // 支出变化百分比
-  profitChange: number       // 利润变化百分比
-  receivableChange: number   // 应收变化百分比
-  payableChange: number      // 应付变化百分比
 }
 
 // 收支记录

@@ -23,9 +23,13 @@ public class WebMvcConfig implements WebMvcConfigurer {
         registry.addInterceptor(authInterceptor)
                 .addPathPatterns("/**")
                 .excludePathPatterns(
-                        // 登录接口
+                        // 登录接口（注册已关闭，需登录）
                         "/auth/login",
                         "/auth/logout",
+                        // 商城认证接口
+                        "/shop/auth/login",
+                        "/shop/auth/register",
+                        "/shop/auth/logout",
                         // Knife4j 文档
                         "/doc.html",
                         "/swagger-ui/**",
@@ -35,7 +39,7 @@ public class WebMvcConfig implements WebMvcConfigurer {
                         "/webjars/**",
                         "/favicon.ico",
                         // 静态资源
-                        "/static/**", "/public/**",
+                        "/static/**", "/public/**", "/files/static/**", "/images/**",
                         // 健康检查
                         "/actuator/health",
                         // 错误页
@@ -49,5 +53,9 @@ public class WebMvcConfig implements WebMvcConfigurer {
                 .addResourceLocations("classpath:/META-INF/resources/");
         registry.addResourceHandler("/webjars/**")
                 .addResourceLocations("classpath:/META-INF/resources/webjars/");
+        registry.addResourceHandler("/files/static/**")
+                .addResourceLocations("file:" + System.getProperty("user.dir") + "/data/files/");
+        registry.addResourceHandler("/images/**")
+                .addResourceLocations("file:" + System.getProperty("user.dir") + "/data/images/");
     }
 }

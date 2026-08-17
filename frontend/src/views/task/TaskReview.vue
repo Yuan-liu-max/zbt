@@ -34,10 +34,9 @@
               allow-clear
               style="width: 150px"
             >
-              <a-select-option value="review">审核任务</a-select-option>
-              <a-select-option value="approval">审批任务</a-select-option>
-              <a-select-option value="process">流程任务</a-select-option>
-              <a-select-option value="general">通用任务</a-select-option>
+              <a-select-option v-for="(info, value) in taskDimensionMap" :key="value" :value="value">
+                {{ info.text }}
+              </a-select-option>
             </a-select>
           </a-form-item>
           <a-form-item label="发起人">
@@ -77,12 +76,12 @@
           :scroll="{ x: 900 }"
         >
           <template #bodyCell="{ column, record }">
-            <template v-if="column.key === 'type'">
-              <span>{{ taskTypeMap[record.type] }}</span>
+            <template v-if="column.key === 'dimension'">
+              <span>{{ taskDimensionMap[record.dimension as TaskDimension]?.text }}</span>
             </template>
             <template v-if="column.key === 'status'">
-              <a-tag :color="reviewStatusMap[record.status]?.color">
-                {{ reviewStatusMap[record.status]?.text }}
+              <a-tag :color="taskStatusMap[record.status as TaskStatus]?.color">
+                {{ taskStatusMap[record.status as TaskStatus]?.text }}
               </a-tag>
             </template>
             <template v-if="column.key === 'action'">
@@ -90,7 +89,7 @@
                 <a @click="handleView(record)" class="action-link">查看</a>
                 <a-divider type="vertical" />
                 <a
-                  v-if="activeTab === 'pending' && record.status === 'pending'"
+                  v-if="activeTab === 'pending'"
                   @click="handleReview(record)"
                   class="action-link"
                 >
@@ -116,13 +115,25 @@
     >
       <div class="review-detail" v-if="currentRecord">
         <a-descriptions :column="1" bordered size="small">
-          <a-descriptions-item label="任务名称">{{ currentRecord.name }}</a-descriptions-item>
-          <a-descriptions-item label="任务类型">{{ taskTypeMap[currentRecord.type] }}</a-descriptions-item>
-          <a-descriptions-item label="发起人">{{ currentRecord.initiator }}</a-descriptions-item>
-          <a-descriptions-item label="发起时间">{{ currentRecord.initiateTime }}</a-descriptions-item>
-          <a-descriptions-item label="当前节点">{{ currentRecord.currentNode }}</a-descriptions-item>
+          <a-descriptions-item label="任务名称">{{ currentRecord.taskTitle }}</a-descriptions-item>
+          <a-descriptions-item label="任务编号">{{ currentRecord.taskNo }}</a-descriptions-item>
+          <a-descriptions-item label="任务类型">{{ taskDimensionMap[currentRecord.dimension]?.text }}</a-descriptions-item>
+          <a-descriptions-item label="负责人">{{ currentRecord.assigneeName }}</a-descriptions-item>
+          <a-descriptions-item label="开始时间">{{ currentRecord.startTime }}</a-descriptions-item>
+          <a-descriptions-item label="状态">
+            <a-tag :color="taskStatusMap[currentRecord.status as TaskStatus]?.color">
+              {{ taskStatusMap[currentRecord.status as TaskStatus]?.text }}
+            </a-tag>
+          </a-descriptions-item>
         </a-descriptions>
         <a-form style="margin-top: 16px">
+          <a-form-item label="审查结果">
+            <a-radio-group v-model:value="reviewResult">
+              <a-radio value="APPROVED">通过</a-radio>
+              <a-radio value="REJECTED">驳回</a-radio>
+              <a-radio value="RECTIFY">整改</a-radio>
+            </a-radio-group>
+          </a-form-item>
           <a-form-item label="审查意见">
             <a-textarea
               v-model:value="reviewComment"
@@ -135,9 +146,13 @@
     </a-modal>
     <a-modal v-model:open="detailVisible" title="详情" :footer="null" width="600px">
       <a-descriptions :column="2" bordered size="small">
-        <a-descriptions-item v-for="(val, key) in detailRecord" :key="key" :label="String(key)" :span="typeof val === 'object' ? 2 : 1">
-          {{ typeof val === 'object' ? JSON.stringify(val) : val }}
-        </a-descriptions-item>
+        <a-descriptions-item label="任务名称">{{ detailRecord?.taskTitle }}</a-descriptions-item>
+        <a-descriptions-item label="任务编号">{{ detailRecord?.taskNo }}</a-descriptions-item>
+        <a-descriptions-item label="任务类型">{{ taskDimensionMap[detailRecord?.dimension as TaskDimension]?.text || detailRecord?.dimension }}</a-descriptions-item>
+        <a-descriptions-item label="状态">{{ taskStatusMap[detailRecord?.status as TaskStatus]?.text || detailRecord?.status }}</a-descriptions-item>
+        <a-descriptions-item label="负责人">{{ detailRecord?.assigneeName }}</a-descriptions-item>
+        <a-descriptions-item label="开始时间">{{ detailRecord?.startTime }}</a-descriptions-item>
+        <a-descriptions-item label="截止时间">{{ detailRecord?.dueTime }}</a-descriptions-item>
       </a-descriptions>
     </a-modal>
   </div>
@@ -147,8 +162,10 @@
 import { ref, reactive, onMounted, onUnmounted } from 'vue'
 import { message } from 'ant-design-vue'
 import { SearchOutlined } from '@ant-design/icons-vue'
-import type { TaskReviewItem, TaskType, ReviewQueryParams } from '@/types/task'
-import { reviewApi, taskTypeMap, reviewStatusMap } from '@/api/task'
+import type { TaskReviewItem, TaskDimension, TaskStatus } from '@/types/task'
+import { reviewApi, taskApi, taskStatusMap, taskDimensionMap } from '@/api/task'
+import { useCrudTable } from '@/composables/useCrudTable'
+import { useDetailModal } from '@/composables/useDetailModal'
 
 // 当前标签页
 const activeTab = ref('pending')
@@ -156,21 +173,37 @@ const activeTab = ref('pending')
 // 搜索表单
 const searchForm = reactive({
   name: '',
-  type: undefined as TaskType | undefined,
+  type: undefined as TaskDimension | undefined,
   initiator: '',
   dateRange: null as any
 })
 
-// 表格数据
-const tableData = ref<TaskReviewItem[]>([])
-const loading = ref(false)
-const pagination = reactive({
-  current: 1,
-  size: 10,
-  total: 0,
-  showSizeChanger: true,
-  showQuickJumper: true,
-  showTotal: (total: number) => `共 ${total} 条`
+// 标签页 -> 前端过滤（后端 my-audit 不分页、不支持查询参数）
+const tabFilter: Record<string, (t: TaskReviewItem) => boolean> = {
+  pending: (t) => ['SUBMITTED', 'AUDITING', 'REJECTED', 'RECTIFYING'].includes(t.status),
+  reviewed: (t) => ['APPROVED', 'COMPLETED'].includes(t.status),
+  initiated: () => true,
+}
+
+// 表格数据（useCrudTable 封装；my-audit 返回数组，包装为 {list,total} 并做前端过滤）
+const { tableData, loading, pagination, loadData, handleSearch, handleTableChange } = useCrudTable<any, typeof searchForm>({
+  searchForm,
+  loadFn: async (params) => {
+    const arr = await reviewApi.getList()
+    const [d0, d1] = params.dateRange || []
+    const startDate = d0?.format?.('YYYY-MM-DD')
+    const endDate = d1?.format?.('YYYY-MM-DD')
+    const list = arr.filter((t) => {
+      if (params.name && !t.taskTitle.includes(params.name)) return false
+      if (params.type && t.dimension !== params.type) return false
+      if (params.initiator && !t.assigneeName.includes(params.initiator)) return false
+      const day = t.startTime?.slice(0, 10)
+      if (startDate && day && day < startDate) return false
+      if (endDate && day && day > endDate) return false
+      return tabFilter[activeTab.value]?.(t) ?? true
+    })
+    return { list, total: list.length }
+  },
 })
 
 // 动态列配置（响应式）
@@ -179,20 +212,19 @@ const getColumnsValue = () => {
 
   if (isMobile) {
     return [
-      { title: '任务名称', dataIndex: 'name', key: 'name', width: 120 },
-      { title: '任务类型', dataIndex: 'type', key: 'type', width: 80 },
-      { title: '发起人', dataIndex: 'initiator', key: 'initiator', width: 70 },
+      { title: '任务名称', dataIndex: 'taskTitle', key: 'taskTitle', width: 120 },
+      { title: '任务类型', dataIndex: 'dimension', key: 'dimension', width: 80 },
+      { title: '负责人', dataIndex: 'assigneeName', key: 'assigneeName', width: 70 },
       { title: '状态', dataIndex: 'status', key: 'status', width: 70, align: 'center' as const },
       { title: '操作', key: 'action', width: 90, fixed: 'right' as const }
     ]
   }
 
   return [
-    { title: '任务名称', dataIndex: 'name', key: 'name', width: 160 },
-    { title: '任务类型', dataIndex: 'type', key: 'type', width: 100 },
-    { title: '发起人', dataIndex: 'initiator', key: 'initiator', width: 80 },
-    { title: '发起时间', dataIndex: 'initiateTime', key: 'initiateTime', width: 150 },
-    { title: '当前节点', dataIndex: 'currentNode', key: 'currentNode', width: 140 },
+    { title: '任务名称', dataIndex: 'taskTitle', key: 'taskTitle', width: 160 },
+    { title: '任务类型', dataIndex: 'dimension', key: 'dimension', width: 100 },
+    { title: '负责人', dataIndex: 'assigneeName', key: 'assigneeName', width: 80 },
+    { title: '开始时间', dataIndex: 'startTime', key: 'startTime', width: 150 },
     { title: '状态', dataIndex: 'status', key: 'status', width: 80, align: 'center' as const },
     { title: '操作', key: 'action', width: 120, fixed: 'right' as const }
   ]
@@ -200,47 +232,18 @@ const getColumnsValue = () => {
 
 const columns = ref(getColumnsValue())
 
-// 详情弹窗
-const detailVisible = ref(false)
-const detailRecord = ref<any>(null)
+// 详情弹窗（useDetailModal 封装）
+const { detailVisible, detailRecord, openDetail } = useDetailModal<TaskReviewItem>()
 
 // 审查弹窗
 const reviewModalVisible = ref(false)
 const reviewLoading = ref(false)
 const currentRecord = ref<TaskReviewItem | null>(null)
+const reviewResult = ref<string>('APPROVED')
 const reviewComment = ref('')
-
-// 加载数据
-const loadData = async () => {
-  loading.value = true
-  try {
-    const params: ReviewQueryParams = {
-      name: searchForm.name || undefined,
-      type: searchForm.type,
-      initiator: searchForm.initiator || undefined,
-      startDate: searchForm.dateRange?.[0]?.format?.('YYYY-MM-DD') || undefined,
-      endDate: searchForm.dateRange?.[1]?.format?.('YYYY-MM-DD') || undefined,
-      page: pagination.current,
-      pageSize: pagination.pageSize
-    }
-    const res = await reviewApi.getList(params)
-    tableData.value = res.list
-    pagination.total = res.total
-  } catch (error) {
-    message.error('加载数据失败')
-  } finally {
-    loading.value = false
-  }
-}
 
 // 标签页切换
 const handleTabChange = () => {
-  pagination.current = 1
-  loadData()
-}
-
-// 搜索
-const handleSearch = () => {
   pagination.current = 1
   loadData()
 }
@@ -254,44 +257,38 @@ const handleReset = () => {
   handleSearch()
 }
 
-// 分页
-const handleTableChange = (pag: any) => {
-  pagination.current = pag.current
-  pagination.pageSize = pag.pageSize
-  loadData()
-}
-
 // 查看
-const handleView = (record: TaskReviewItem) => {
-  detailRecord.value = record
-  detailVisible.value = true
-}
+const handleView = openDetail
 
 // 审查
 const handleReview = (record: TaskReviewItem) => {
   currentRecord.value = record
+  reviewResult.value = 'APPROVED'
   reviewComment.value = ''
   reviewModalVisible.value = true
 }
 
 // 审查确认
 const handleReviewOk = async () => {
-  if (!reviewComment.value.trim()) {
-    message.warning('请输入审查意见')
+  if (!currentRecord.value) return
+  if (!reviewResult.value) {
+    message.warning('请选择审查结果')
     return
   }
   reviewLoading.value = true
   try {
-    await reviewApi.submitReview(currentReviewItem.value!.id, {
-      approved: true,
-      comment: reviewComment.value
+    await taskApi.audit({
+      taskId: currentRecord.value.id,
+      auditResult: reviewResult.value as 'APPROVED' | 'REJECTED' | 'RECTIFY',
+      auditComment: reviewComment.value,
     })
     message.success('审查提交成功')
     reviewModalVisible.value = false
+    reviewResult.value = 'APPROVED'
     reviewComment.value = ''
     loadData()
   } catch (error) {
-    message.error('审查提交失败')
+    console.error('审查提交失败', error)
   } finally {
     reviewLoading.value = false
   }

@@ -43,6 +43,7 @@ export interface SalesItem {
   id: number
   productName: string
   category: string
+  spec?: string
   style: string
   material: string
   weight: string
@@ -69,28 +70,21 @@ export interface SalesQueryParams {
   size: number
 }
 
-// 销售统计
+// 销售统计（后端 GET /sales/stats）
 export interface SalesStats {
-  totalSales: number
-  completionRate: number
-  newCustomerRatio: number
-  oldCustomerRatio: number
+  totalAmount: number
   orderCount: number
-  avgOrderAmount: number
+  todayAmount: number
 }
 
-// 员工排行
+// 员工排行（后端 GET /sales/ranking/employees → [{employeeId, amount}]）
 export interface EmployeeRanking {
-  rank: number
-  name: string
-  salesAmount: number
-  orderCount: number
-  avgOrderAmount: number
+  employeeId: number
+  amount: number
 }
 
-// 品类统计
+// 品类统计（后端 GET /sales/category-structure → [{category, amount}]）
 export interface CategoryStats {
-  name: string
-  value: number
-  percentage: number
+  category: string
+  amount: number
 }

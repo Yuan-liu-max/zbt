@@ -21,7 +21,23 @@ public class User {
 
     private String phone;
 
+    private String email;
+
     private String avatar;
+
+    private String timezone;
+
+    private String language;
+
+    private String dateFormat;
+
+    private Boolean notifySystem;
+
+    private Boolean notifyOrder;
+
+    private Boolean notifyInventory;
+
+    private Boolean notifyMarketing;
 
     private Long storeId;
 
@@ -32,6 +48,9 @@ public class User {
     private LocalDate entryDate;
 
     private String status;
+
+    /** 令牌版本号，强制下线时+1，旧token立即失效 */
+    private Integer tokenVersion;
 
     private LocalDateTime lastLoginAt;
 

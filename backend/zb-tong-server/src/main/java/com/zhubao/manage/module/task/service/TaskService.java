@@ -31,14 +31,17 @@ public class TaskService {
     private final TaskTemplateMapper taskTemplateMapper;
     private final StoreMapper storeMapper;
     private final UserMapper userMapper;
+    private final com.zhubao.manage.common.interceptor.UserContextHolder userContextHolder;
 
     public TaskService(TaskInstanceMapper taskInstanceMapper,
                        TaskTemplateMapper taskTemplateMapper,
-                       StoreMapper storeMapper, UserMapper userMapper) {
+                       StoreMapper storeMapper, UserMapper userMapper,
+                       com.zhubao.manage.common.interceptor.UserContextHolder userContextHolder) {
         this.taskInstanceMapper = taskInstanceMapper;
         this.taskTemplateMapper = taskTemplateMapper;
         this.storeMapper = storeMapper;
         this.userMapper = userMapper;
+        this.userContextHolder = userContextHolder;
     }
 
     // ============ 生成任务 ============
@@ -53,9 +56,13 @@ public class TaskService {
             throw new BusinessException(ErrorCode.TASK_TEMPLATE_NOT_FOUND);
         }
 
+        // 批量查门店 (P1-6)
+        List<Store> stores = storeMapper.selectBatchIds(storeIds);
+        java.util.Map<Long, Store> storeMap = stores.stream().collect(java.util.stream.Collectors.toMap(Store::getId, s -> s));
+
         List<TaskInstance> instances = new ArrayList<>();
         for (Long storeId : storeIds) {
-            Store store = storeMapper.selectById(storeId);
+            Store store = storeMap.get(storeId);
 
             TaskInstance instance = new TaskInstance();
             instance.setTemplateId(templateId);
@@ -72,14 +79,53 @@ public class TaskService {
             instance.setSourceType(template.getIsForce() == 1 ? "HQ" : "CYCLE");
             instance.setIsOverdue(0);
             instance.setOverdueMinutes(0);
-            taskInstanceMapper.insert(instance);
-            // 基于 DB 自增 ID 生成任务编号，多实例安全
             String date = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
-            instance.setTaskNo("TK" + date + String.format("%06d", instance.getId() % 1000000));
-            taskInstanceMapper.updateById(instance);
+            instance.setTaskNo("TK" + date + String.format("%06d", System.currentTimeMillis() % 1000000 + instances.size()));
+            taskInstanceMapper.insert(instance);
             instances.add(instance);
         }
         return instances;
+    }
+
+    /** 单个创建任务（手动创建） */
+    @Transactional
+    public TaskInstance createTask(TaskInstance task) {
+        if (task.getTaskTitle() == null || task.getTaskTitle().trim().isEmpty()) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "任务标题不能为空");
+        }
+        // assigneeId 兜底：未指定负责人时默认为当前登录用户
+        if (task.getAssigneeId() == null) {
+            task.setAssigneeId(userContextHolder.getUserId());
+        }
+        // storeId 兜底：从负责人推断，仍为空则取第一条门店
+        if (task.getStoreId() == null) {
+            User assignee = userMapper.selectById(task.getAssigneeId());
+            if (assignee != null && assignee.getStoreId() != null) {
+                task.setStoreId(assignee.getStoreId());
+            }
+            if (task.getStoreId() == null) {
+                List<Store> stores = storeMapper.selectList(null);
+                if (stores != null && !stores.isEmpty()) {
+                    task.setStoreId(stores.get(0).getId());
+                }
+            }
+        }
+        task.setId(null);
+        String date = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
+        task.setTaskNo("TK" + date + String.format("%06d", System.currentTimeMillis() % 1000000));
+        task.setStatus(task.getStatus() == null ? "PENDING" : task.getStatus());
+        task.setPriority(task.getPriority() == null ? "MEDIUM" : task.getPriority());
+        task.setDimension(task.getDimension() == null ? "COMPREHENSIVE" : task.getDimension());
+        task.setCategory(task.getCategory() == null ? "" : task.getCategory());
+        task.setSourceType(task.getSourceType() == null ? "MANUAL" : task.getSourceType());
+        task.setStartTime(task.getStartTime() == null ? LocalDateTime.now() : task.getStartTime());
+        if (task.getDueTime() == null) {
+            task.setDueTime(task.getStartTime().plusDays(3));
+        }
+        task.setIsOverdue(0);
+        task.setOverdueMinutes(0);
+        taskInstanceMapper.insert(task);
+        return task;
     }
 
     // ============ 查询 ============
@@ -184,6 +230,14 @@ public class TaskService {
             throw new BusinessException(ErrorCode.TASK_STATUS_INVALID);
         }
         task.setStatus(TaskStatusEnum.IN_PROGRESS.getCode());
+        taskInstanceMapper.updateById(task);
+    }
+
+    /** 通用更新任务 */
+    @Transactional
+    public void updateTask(TaskInstance task) {
+        TaskInstance exist = getById(task.getId());
+        if (exist == null) throw new BusinessException(ErrorCode.DATA_NOT_FOUND);
         taskInstanceMapper.updateById(task);
     }
 

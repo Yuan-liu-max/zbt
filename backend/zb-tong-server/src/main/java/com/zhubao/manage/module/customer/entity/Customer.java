@@ -9,6 +9,7 @@ import java.time.LocalDateTime;
 @TableName("customer")
 public class Customer {
     @TableId(type = IdType.AUTO) private Long id;
+    private Long userId;
     private String code;
     private String name;
     private String phone;

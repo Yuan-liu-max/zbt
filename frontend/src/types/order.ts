@@ -7,7 +7,7 @@ export type OrderStatus = 'pending' | 'paid' | 'shipped' | 'completed' | 'cancel
 export type PaymentStatus = 'unpaid' | 'paid' | 'refunded'
 
 // 退换货申请状态
-export type ReturnStatus = 'applying' | 'reviewing' | 'approved' | 'rejected' | 'completed'
+export type ReturnStatus = 'applying' | 'reviewing' | 'approved' | 'rejected' | 'completed' | 'cancelled'
 
 // 退换货类型
 export type ReturnType = 'refund' | 'exchange'
@@ -45,6 +45,9 @@ export interface OrderRecord {
   paymentStatus: PaymentStatus // 支付状态
   paymentMethod: string      // 支付方式
   deliveryMethod: string     // 配送方式
+  deliveryCompany?: string   // 物流公司
+  deliveryTrackNo?: string   // 运单号
+  deliveryTime?: string      // 发货时间
   remark?: string            // 买家留言
   createdAt: string          // 下单时间
   logs: OrderLog[]           // 操作记录

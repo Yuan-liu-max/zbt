@@ -9,6 +9,12 @@ import java.time.LocalDateTime;
 @TableName("product_inventory_check")
 public class ProductInventoryCheck {
     @TableId(type = IdType.AUTO) private Long id;
+    private String checkCode;
+    private String checkName;
+    private String checkType;
+    private LocalDate startDate;
+    private LocalDate endDate;
+    private String status;
     private LocalDate checkDate;
     private Long storeId;
     private Long checkedBy;
@@ -16,6 +22,7 @@ public class ProductInventoryCheck {
     private Integer abnormalCount;
     private String abnormalItems;
     private String photos;
+    private String warehouse;
     private String remark;
     @TableLogic private Integer isDeleted;
 

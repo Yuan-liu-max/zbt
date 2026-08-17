@@ -89,7 +89,7 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
 import { PlusOutlined } from '@ant-design/icons-vue'
-import type { GoodsCategory, GoodsStatus } from '@/types/goods'
+import type { GoodsCategory, GoodsStatus, CategoryLevel } from '@/types/goods'
 import { categoryApi } from '@/api/goods'
 
 // 分类数据（树形结构）
@@ -114,7 +114,7 @@ const formData = reactive({
   id: '',
   name: '',
   parentId: null as string | null,
-  level: 1 as 1 | 2,
+  level: 1 as CategoryLevel,
   sort: 1,
   status: 'on' as GoodsStatus
 })
@@ -141,7 +141,7 @@ const loadCategoryTree = async () => {
   try {
     categoryTree.value = await categoryApi.getTree()
   } catch (error) {
-    message.error('加载分类数据失败')
+    console.error('加载分类数据失败', error)
   } finally {
     loading.value = false
   }
@@ -184,7 +184,7 @@ const handleDelete = async (id: string) => {
     message.success('删除成功')
     loadCategoryTree()
   } catch (error) {
-    message.error('删除失败')
+    console.error('删除失败', error)
   }
 }
 

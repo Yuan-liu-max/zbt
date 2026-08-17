@@ -176,6 +176,7 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
+import { useCrudTable } from '@/composables/useCrudTable'
 import {
   PlusOutlined,
   SearchOutlined,
@@ -185,7 +186,7 @@ import {
   StarOutlined,
   TeamOutlined
 } from '@ant-design/icons-vue'
-import type { MemberLevel, MemberQueryParams, MemberStats, MemberLevelStatus } from '@/types/customer'
+import type { MemberLevel, MemberStats, MemberLevelStatus } from '@/types/customer'
 import { memberApi } from '@/api/customer'
 
 // 会员统计
@@ -204,16 +205,17 @@ const searchForm = reactive({
   status: undefined as MemberLevelStatus | undefined
 })
 
-// 表格数据
-const tableData = ref<MemberLevel[]>([])
-const loading = ref(false)
-const pagination = reactive({
-  current: 1,
-  size: 10,
-  total: 0,
-  showSizeChanger: true,
-  showQuickJumper: true,
-  showTotal: (total: number) => `共 ${total} 条`
+// 表格数据（使用 useCrudTable composable）
+const { tableData, loading, pagination, loadData, handleSearch, handleTableChange } = useCrudTable<MemberLevel, typeof searchForm>({
+  searchForm,
+  loadFn: (params) => memberApi.getList({
+    // 会员等级下拉的值为等级名称，后端按 name 模糊匹配；level 参数匹配的是标识字段
+    name: (params as any).level || (params as any).name || undefined,
+    phone: (params as any).phone || undefined,
+    status: (params as any).status,
+    page: params.page || 1,
+    pageSize: params.pageSize || 10,
+  }),
 })
 
 // 表格列配置
@@ -268,48 +270,13 @@ const loadStats = async () => {
   }
 }
 
-// 加载数据
-const loadData = async () => {
-  loading.value = true
-  try {
-    const params: MemberQueryParams = {
-      level: searchForm.level,
-      name: searchForm.name || undefined,
-      phone: searchForm.phone || undefined,
-      status: searchForm.status,
-      page: pagination.current,
-      pageSize: pagination.pageSize
-    }
-    const res = await memberApi.getList(params)
-    tableData.value = res.list
-    pagination.total = res.total
-  } catch (error) {
-    message.error('加载数据失败')
-  } finally {
-    loading.value = false
-  }
-}
-
-// 搜索
-const handleSearch = () => {
-  pagination.current = 1
-  loadData()
-}
-
-// 重置
+// 重置（覆盖 composable 版本以正确清空表单字段）
 const handleReset = () => {
   searchForm.level = undefined
   searchForm.name = ''
   searchForm.phone = ''
   searchForm.status = undefined
   handleSearch()
-}
-
-// 分页
-const handleTableChange = (pag: any) => {
-  pagination.current = pag.current
-  pagination.pageSize = pag.pageSize
-  loadData()
 }
 
 // 新增等级
@@ -343,7 +310,7 @@ const handleDisable = async (record: MemberLevel) => {
     message.success('已停用')
     loadData()
   } catch (error) {
-    message.error('操作失败')
+    console.error('操作失败', error)
   }
 }
 
@@ -354,7 +321,7 @@ const handleEnable = async (record: MemberLevel) => {
     message.success('已启用')
     loadData()
   } catch (error) {
-    message.error('操作失败')
+    console.error('操作失败', error)
   }
 }
 

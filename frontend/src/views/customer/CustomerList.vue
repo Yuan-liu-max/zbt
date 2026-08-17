@@ -119,6 +119,9 @@
         :label-col="{ span: 6 }"
         :wrapper-col="{ span: 16 }"
       >
+        <a-form-item label="客户编号" name="code">
+          <a-input v-model:value="formData.code" placeholder="自动生成，可手动修改" />
+        </a-form-item>
         <a-form-item label="客户姓名" name="name">
           <a-input v-model:value="formData.name" placeholder="请输入客户姓名" />
         </a-form-item>
@@ -148,7 +151,9 @@
 import { ref, reactive, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
 import { PlusOutlined, SearchOutlined, ExportOutlined } from '@ant-design/icons-vue'
-import type { CustomerItem, CustomerQueryParams, CustomerLevel } from '@/types/customer'
+import { useCrudTable } from '@/composables/useCrudTable'
+import { useDetailModal } from '@/composables/useDetailModal'
+import type { CustomerItem, CustomerLevel } from '@/types/customer'
 import { customerApi, levelColorMap, levelTextMap } from '@/api/customer'
 import { exportComingSoon } from '@/utils/export'
 
@@ -160,16 +165,20 @@ const searchForm = reactive({
   dateRange: null as any
 })
 
-// 表格数据
-const tableData = ref<CustomerItem[]>([])
-const loading = ref(false)
-const pagination = reactive({
-  current: 1,
-  size: 10,
-  total: 0,
-  showSizeChanger: true,
-  showQuickJumper: true,
-  showTotal: (total: number) => `共 ${total} 条`
+// 表格数据（使用 useCrudTable composable）
+const { tableData, loading, pagination, loadData, handleSearch, handleTableChange, handleDelete: _handleDelete } = useCrudTable<CustomerItem, typeof searchForm>({
+  searchForm,
+  loadFn: (params) => customerApi.getList({
+    name: (params as any).name || undefined,
+    phone: (params as any).phone || undefined,
+    level: (params as any).level,
+    startDate: searchForm.dateRange?.[0]?.format?.('YYYY-MM-DD') || undefined,
+    endDate: searchForm.dateRange?.[1]?.format?.('YYYY-MM-DD') || undefined,
+    page: params.page || 1,
+    pageSize: params.pageSize || 10,
+  }),
+  deleteFn: (id) => customerApi.delete(id),
+  onDeleteSuccess: () => message.success('删除成功'),
 })
 
 // 表格列配置
@@ -186,9 +195,8 @@ const columns = [
   { title: '操作', key: 'action', width: 140, fixed: 'right' as const }
 ]
 
-// 详情弹窗
-const detailVisible = ref(false)
-const detailRecord = ref<any>(null)
+// 详情弹窗（使用 useDetailModal composable）
+const { detailVisible, detailRecord, openDetail } = useDetailModal<CustomerItem>()
 
 // 弹窗相关
 const modalVisible = ref(false)
@@ -197,6 +205,7 @@ const isEdit = ref(false)
 const formRef = ref()
 const formData = reactive({
   id: '',
+  code: '',
   name: '',
   phone: '',
   level: 'normal' as CustomerLevel
@@ -208,36 +217,7 @@ const formRules = {
   level: [{ required: true, message: '请选择客户等级', trigger: 'change' }]
 }
 
-// 加载数据
-const loadData = async () => {
-  loading.value = true
-  try {
-    const params: CustomerQueryParams = {
-      name: searchForm.name || undefined,
-      phone: searchForm.phone || undefined,
-      level: searchForm.level,
-      startDate: searchForm.dateRange?.[0]?.format?.('YYYY-MM-DD') || undefined,
-      endDate: searchForm.dateRange?.[1]?.format?.('YYYY-MM-DD') || undefined,
-      page: pagination.current,
-      pageSize: pagination.pageSize
-    }
-    const res = await customerApi.getList(params)
-    tableData.value = res.list
-    pagination.total = res.total
-  } catch (error) {
-    message.error('加载数据失败')
-  } finally {
-    loading.value = false
-  }
-}
-
-// 搜索
-const handleSearch = () => {
-  pagination.current = 1
-  loadData()
-}
-
-// 重置
+// 重置（覆盖 composable 版本以正确清空表单字段）
 const handleReset = () => {
   searchForm.name = ''
   searchForm.phone = ''
@@ -251,13 +231,6 @@ const handleExport = () => {
   exportComingSoon('客户数据')
 }
 
-// 分页
-const handleTableChange = (pag: any) => {
-  pagination.current = pag.current
-  pagination.pageSize = pag.pageSize
-  loadData()
-}
-
 // 新增
 const handleAdd = () => {
   isEdit.value = false
@@ -265,31 +238,25 @@ const handleAdd = () => {
   modalVisible.value = true
 }
 
-// 查看
+// 查看（使用 useDetailModal 的 openDetail）
 const handleView = (record: CustomerItem) => {
-  detailRecord.value = record
-  detailVisible.value = true
+  openDetail(record)
 }
 
 // 编辑
 const handleEdit = (record: CustomerItem) => {
   isEdit.value = true
   formData.id = record.id
+  formData.code = record.code || ''
   formData.name = record.name
   formData.phone = record.phone
   formData.level = record.level
   modalVisible.value = true
 }
 
-// 删除
-const handleDelete = async (record: CustomerItem) => {
-  try {
-    await customerApi.delete(record.id)
-    message.success('删除成功')
-    loadData()
-  } catch (error) {
-    message.error('删除失败')
-  }
+// 删除（包装 composable 版本，保留 record 参数签名）
+const handleDelete = (record: CustomerItem) => {
+  _handleDelete(record.id)
 }
 
 // 弹窗确认
@@ -299,6 +266,7 @@ const handleModalOk = async () => {
     modalLoading.value = true
 
     const submitData = {
+      code: formData.code,
       name: formData.name,
       phone: formData.phone,
       level: formData.level
@@ -324,6 +292,7 @@ const handleModalOk = async () => {
 // 重置表单
 const resetForm = () => {
   formData.id = ''
+  formData.code = ''
   formData.name = ''
   formData.phone = ''
   formData.level = 'normal'

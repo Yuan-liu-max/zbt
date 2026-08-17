@@ -5,13 +5,13 @@ server:
 
 spring:
   profiles:
-    active: dev
+    active: prod
   application:
     name: zb-tong-server
 
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
-    url: jdbc:mysql://localhost:3306/zb_tong?useUnicode=true&characterEncoding=utf-8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+    url: jdbc:mysql://localhost:3306/zb_tong?useUnicode=true&characterEncoding=utf-8&useSSL=true&serverTimezone=Asia/Shanghai
     username: ${DB_USERNAME}
     password: ${DB_PASSWORD}
     hikari:
@@ -63,10 +63,11 @@ mybatis-plus:
       logic-delete-field: isDeleted
       logic-delete-value: 1
       logic-not-delete-value: 0
+      update-strategy: not_null
   configuration:
     map-underscore-to-camel-case: true
     cache-enabled: false
-    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+    log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl
 
 knife4j:
   enable: true
@@ -74,14 +75,14 @@ knife4j:
     language: zh-CN
 
 jwt:
-  secret: ${JWT_SECRET}
-  expiration: 7200000
+  secret: ${JWT_SECRET:}  # 生产无默认值，空密钥导致启动失败；dev 环境在 application-dev.yml 覆盖
+  expiration: 86400000  # 1天
   header: Authorization
   token-prefix: "Bearer "
 
 file:
   storage:
-    type: minio
+    type: local  # local(本地磁盘,无需外部服务) | minio | oss
     pre-url-expiry: 600
     minio:
       endpoint: http://localhost:9000
@@ -105,10 +106,11 @@ xxl:
 ai:
   openai:
     api-key: ${OPENAI_API_KEY}
-    model: gpt-4
+    model: ${AI_MODEL:gpt-4}
+    base-url: ${AI_BASE_URL:https://api.openai.com/v1}
     timeout: 120
 
 logging:
   level:
     root: INFO
-    com.zhubao.manage: DEBUG
+    com.zhubao.manage: INFO

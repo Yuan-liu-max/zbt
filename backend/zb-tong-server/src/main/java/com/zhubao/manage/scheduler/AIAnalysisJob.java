@@ -53,7 +53,7 @@ public class AIAnalysisJob {
     }
 
     private void doStubAnalysis() {
-        log.warn("[AI SKIP] OPENAI_API_KEY 未配置 (当前值: {}), 跳过AI分析", apiKey);
+        log.warn("[AI SKIP] OPENAI_API_KEY 未配置，跳过AI分析");
         log.info("[AI 1/3] 员工画像分析 - 跳过 (无API Key)");
         log.info("[AI 2/3] 货品运营分析 - 跳过 (无API Key)");
         log.info("[AI 3/3] 场景风险分析 - 跳过 (无API Key)");

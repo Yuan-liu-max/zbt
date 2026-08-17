@@ -126,6 +126,7 @@ import { ref, reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import { UserOutlined, LockOutlined, MobileOutlined, CheckCircleOutlined } from '@ant-design/icons-vue'
+import { authApi } from '@/api/auth'
 
 const router = useRouter()
 const formRef = ref()
@@ -179,13 +180,12 @@ const handleRegister = async () => {
     await formRef.value?.validateFields()
     registerLoading.value = true
 
-    // 模拟注册
-    await new Promise(resolve => setTimeout(resolve, 1000))
+    await authApi.register(formData.username, formData.password, formData.phone)
 
     message.success('注册成功！请登录')
     router.push('/login')
-  } catch (error) {
-    console.error('注册失败', error)
+  } catch (error: any) {
+    message.error(error?.message || '注册失败，请稍后重试')
   } finally {
     registerLoading.value = false
   }

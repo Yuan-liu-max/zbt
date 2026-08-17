@@ -68,11 +68,26 @@ public class RoleService {
 
     @Transactional
     public void delete(Long id) {
-        getById(id);
+        Role role = getById(id);
+        if (isBuiltinRole(role.getRoleCode())) {
+            throw new BusinessException(ErrorCode.ROLE_BUILTIN);
+        }
         roleMapper.deleteById(id);
         // 清除关联数据
         rolePermissionMapper.delete(new LambdaQueryWrapper<RolePermission>().eq(RolePermission::getRoleId, id));
         roleDataScopeMapper.delete(new LambdaQueryWrapper<RoleDataScope>().eq(RoleDataScope::getRoleId, id));
+    }
+
+    /**
+     * 系统预置角色（ROLE_ADMIN/ROLE_HQ/... 前缀）禁止删除
+     */
+    private boolean isBuiltinRole(String roleCode) {
+        if (roleCode == null) return false;
+        String[] prefixes = {"ROLE_ADMIN", "ROLE_HQ", "ROLE_REGIONAL", "ROLE_MANAGER", "ROLE_ASSOCIATE"};
+        for (String prefix : prefixes) {
+            if (roleCode.startsWith(prefix)) return true;
+        }
+        return false;
     }
 
     /**

@@ -16,26 +16,11 @@
             style="width: 380px"
           />
         </a-form-item>
-        <a-form-item label="操作类型">
-          <a-select v-model:value="searchForm.action" placeholder="全部类型" allow-clear style="width: 150px">
-            <a-select-option value="新增商品">新增商品</a-select-option>
-            <a-select-option value="编辑用户">编辑用户</a-select-option>
-            <a-select-option value="发货处理">发货处理</a-select-option>
-            <a-select-option value="取消订单">取消订单</a-select-option>
-            <a-select-option value="重置密码">重置密码</a-select-option>
-            <a-select-option value="修改角色">修改角色</a-select-option>
-            <a-select-option value="创建活动">创建活动</a-select-option>
-            <a-select-option value="退款处理">退款处理</a-select-option>
-          </a-select>
+        <a-form-item label="操作模块">
+          <a-input v-model:value="searchForm.module" placeholder="请输入操作模块" allow-clear style="width: 150px" />
         </a-form-item>
         <a-form-item label="用户">
-          <a-select v-model:value="searchForm.operator" placeholder="全部用户" allow-clear style="width: 130px">
-            <a-select-option value="管理员">管理员</a-select-option>
-            <a-select-option value="张三">张三</a-select-option>
-            <a-select-option value="李四">李四</a-select-option>
-            <a-select-option value="王五">王五</a-select-option>
-            <a-select-option value="赵六">赵六</a-select-option>
-          </a-select>
+          <a-input v-model:value="searchForm.operator" placeholder="请输入操作人员" allow-clear style="width: 130px" />
         </a-form-item>
         <a-form-item label="关键字搜索">
           <a-input v-model:value="searchForm.keyword" placeholder="请输入操作模块、详情内容关键字" allow-clear style="width: 250px">
@@ -61,7 +46,7 @@
           </a-checkbox>
         </div>
         <div class="toolbar-right">
-          <a-button @click="handleExport" :disabled="selectedRowKeys.length === 0">
+          <a-button @click="handleExport">
             <DownloadOutlined /> 导出日志
           </a-button>
           <a-popconfirm
@@ -88,12 +73,8 @@
         :scroll="{ x: 900 }"
       >
         <template #bodyCell="{ column, record }">
-          <template v-if="column.key === 'result'">
-            <a-tag :color="resultMap[record.result]?.color">
-              {{ resultMap[record.result]?.text }}
-            </a-tag>
-          </template>
-          <template v-if="column.key === 'action'">
+          <!-- 详情 -->
+          <template v-if="column.key === 'detail'">
             <a @click="handleViewDetail(record)" class="action-link">查看详情</a>
           </template>
         </template>
@@ -101,19 +82,16 @@
     </div>
 
     <!-- 详情弹窗 -->
-    <a-modal v-model:open="detailVisible" title="日志详情" :footer="null" width="500px">
+    <a-modal v-model:open="detailVisible" title="日志详情" :footer="null" width="600px">
       <a-descriptions :column="1" bordered size="small">
-        <a-descriptions-item label="日志时间">{{ currentLog?.logTime }}</a-descriptions-item>
+        <a-descriptions-item label="日志时间">{{ currentLog?.createdAt }}</a-descriptions-item>
         <a-descriptions-item label="操作模块">{{ currentLog?.module }}</a-descriptions-item>
         <a-descriptions-item label="操作类型">{{ currentLog?.action }}</a-descriptions-item>
-        <a-descriptions-item label="操作人员">{{ currentLog?.operator }}</a-descriptions-item>
-        <a-descriptions-item label="IP地址">{{ currentLog?.ip }}</a-descriptions-item>
-        <a-descriptions-item label="操作结果">
-          <a-tag :color="resultMap[currentLog?.result || 'success']?.color">
-            {{ resultMap[currentLog?.result || 'success']?.text }}
-          </a-tag>
-        </a-descriptions-item>
-        <a-descriptions-item label="详情">{{ currentLog?.detail || '无' }}</a-descriptions-item>
+        <a-descriptions-item label="操作人员">{{ currentLog?.operatorName || currentLog?.operatorId || '-' }}</a-descriptions-item>
+        <a-descriptions-item label="IP地址">{{ currentLog?.requestIp || '-' }}</a-descriptions-item>
+        <a-descriptions-item label="请求参数">{{ currentLog?.requestParams || '无' }}</a-descriptions-item>
+        <a-descriptions-item label="变更前数据">{{ currentLog?.oldData || '无' }}</a-descriptions-item>
+        <a-descriptions-item label="变更后数据">{{ currentLog?.newData || '无' }}</a-descriptions-item>
       </a-descriptions>
     </a-modal>
   </div>
@@ -123,26 +101,31 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
 import { SearchOutlined, ReloadOutlined, DownloadOutlined, DeleteOutlined } from '@ant-design/icons-vue'
-import type { LogItem, LogQueryParams, LogResult } from '@/types/log'
-import { logApi, resultMap } from '@/api/log'
+import type { LogItem } from '@/types/log'
+import { logApi } from '@/api/log'
+import { useCrudTable } from '@/composables/useCrudTable'
+import { useDetailModal } from '@/composables/useDetailModal'
 
 // 搜索表单
 const searchForm = reactive({
   dateRange: null as any,
-  action: undefined as string | undefined,
+  module: undefined as string | undefined,
   operator: undefined as string | undefined,
   keyword: ''
 })
 
-// 表格数据
-const tableData = ref<LogItem[]>([])
-const loading = ref(false)
-const selectedRowKeys = ref<string[]>([])
-const pagination = reactive({
-  current: 1, pageSize: 10, total: 0,
-  showSizeChanger: true, showQuickJumper: true,
-  showTotal: (total: number) => `共 ${total} 条`
+// 表格数据（useCrudTable 封装，适配 dateRange -> startDate/endDate）
+const { tableData, loading, pagination, loadData, handleSearch: _handleSearch, handleTableChange } = useCrudTable<any, typeof searchForm>({
+  searchForm,
+  loadFn: (params) => {
+    const p: any = { ...params }
+    if (p.dateRange?.[0]) p.startDate = p.dateRange[0].format?.('YYYY-MM-DD HH:mm:ss') || undefined
+    if (p.dateRange?.[1]) p.endDate = p.dateRange[1].format?.('YYYY-MM-DD HH:mm:ss') || undefined
+    delete p.dateRange
+    return logApi.getList(p)
+  },
 })
+const selectedRowKeys = ref<string[]>([])
 
 // 全选状态
 const checkAll = computed({
@@ -153,44 +136,25 @@ const indeterminate = computed(() => selectedRowKeys.value.length > 0 && selecte
 
 // 表格列配置
 const columns = [
-  { title: '日志时间', dataIndex: 'logTime', key: 'logTime', width: 170, sorter: true },
+  { title: '日志时间', dataIndex: 'createdAt', key: 'createdAt', width: 170 },
   { title: '操作模块', dataIndex: 'module', key: 'module', width: 110 },
   { title: '操作类型', dataIndex: 'action', key: 'action', width: 110 },
-  { title: '操作人员', dataIndex: 'operator', key: 'operator', width: 100 },
-  { title: 'IP地址', dataIndex: 'ip', key: 'ip', width: 140 },
-  { title: '操作结果', dataIndex: 'result', key: 'result', width: 90, align: 'center' as const },
-  { title: '详情', key: 'action', width: 100, align: 'center' as const }
+  { title: '操作人员', dataIndex: 'operatorName', key: 'operatorName', width: 110 },
+  { title: 'IP地址', dataIndex: 'requestIp', key: 'requestIp', width: 140 },
+  { title: '操作对象', dataIndex: 'targetType', key: 'targetType', width: 100 },
+  { title: '详情', key: 'detail', width: 100, align: 'center' as const }
 ]
 
-// 详情弹窗
-const detailVisible = ref(false)
-const currentLog = ref<LogItem | null>(null)
+// 详情弹窗（useDetailModal 封装，内部 ref 重命名为 currentLog）
+const { detailVisible, detailRecord: currentLog, openDetail } = useDetailModal<LogItem>()
 
-// 加载数据
-const loadData = async () => {
-  loading.value = true
-  try {
-    const params: LogQueryParams = {
-      startDate: searchForm.dateRange?.[0]?.format?.('YYYY-MM-DD HH:mm:ss') || undefined,
-      endDate: searchForm.dateRange?.[1]?.format?.('YYYY-MM-DD HH:mm:ss') || undefined,
-      action: searchForm.action || undefined,
-      operator: searchForm.operator || undefined,
-      keyword: searchForm.keyword || undefined,
-      page: pagination.current,
-      pageSize: pagination.pageSize
-    }
-    const res = await logApi.getList(params)
-    tableData.value = res.list
-    pagination.total = res.total
-  } catch { message.error('加载数据失败') } finally { loading.value = false }
-}
+// 搜索（扩展：清除已选行）
+const handleSearch = () => { selectedRowKeys.value = []; _handleSearch() }
 
-const handleSearch = () => { pagination.current = 1; selectedRowKeys.value = []; loadData() }
 const handleReset = () => {
-  searchForm.dateRange = null; searchForm.action = undefined; searchForm.operator = undefined; searchForm.keyword = ''
+  searchForm.dateRange = null; searchForm.module = undefined; searchForm.operator = undefined; searchForm.keyword = ''
   handleSearch()
 }
-const handleTableChange = (pag: any) => { pagination.current = pag.current; pagination.pageSize = pag.pageSize; loadData() }
 
 // 多选
 const onSelectChange = (keys: string[]) => { selectedRowKeys.value = keys }
@@ -199,10 +163,24 @@ const handleCheckAll = (e: any) => {
 }
 
 // 查看详情
-const handleViewDetail = (record: LogItem) => { currentLog.value = record; detailVisible.value = true }
+const handleViewDetail = openDetail
 
-// 导出
-const handleExport = () => { message.success(`已导出 ${selectedRowKeys.value.length} 条日志`) }
+// 导出：按当前搜索条件导出 CSV
+const handleExport = () => {
+  const params: Record<string, string> = {}
+  if (searchForm.module) params.module = searchForm.module
+  if (searchForm.operator) params.operator = searchForm.operator
+  if (searchForm.keyword) params.keyword = searchForm.keyword
+  if (searchForm.dateRange?.[0]) params.startDate = searchForm.dateRange[0].format?.('YYYY-MM-DD HH:mm:ss')
+  if (searchForm.dateRange?.[1]) params.endDate = searchForm.dateRange[1].format?.('YYYY-MM-DD HH:mm:ss')
+  const qs = new URLSearchParams(params).toString()
+  const link = document.createElement('a')
+  link.href = `/api/reports/operate-logs/export${qs ? '?' + qs : ''}`
+  link.download = 'operate-logs.csv'
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+}
 
 // 批量删除
 const handleBatchDelete = async () => {
@@ -211,7 +189,7 @@ const handleBatchDelete = async () => {
     message.success(`已删除 ${selectedRowKeys.value.length} 条日志`)
     selectedRowKeys.value = []
     loadData()
-  } catch { message.error('删除失败') }
+  } catch (error) { console.error('删除失败', error) }
 }
 
 onMounted(() => { loadData() })

@@ -37,7 +37,7 @@
         :loading="loading"
         :pagination="pagination"
         @change="handleTableChange"
-        row-key="storeId"
+        row-key="id"
         :scroll="{ x: 1000 }"
       >
         <template #bodyCell="{ column, record }">
@@ -105,15 +105,23 @@ import { message } from 'ant-design-vue'
 import { PlusOutlined, SearchOutlined } from '@ant-design/icons-vue'
 import type { StoreItem, StoreStatus } from '@/types/system'
 import { storeApi } from '@/api/store'
+import { useCrudTable } from '@/composables/useCrudTable'
 
 const searchForm = reactive({
   storeName: '',
   status: undefined as StoreStatus | undefined,
 })
 
-const tableData = ref<StoreItem[]>([])
-const loading = ref(false)
-const pagination = reactive({ current: 1, pageSize: 10, total: 0, showSizeChanger: true, showQuickJumper: true, showTotal: (total: number) => `共 ${total} 条` })
+const { tableData, loading, pagination, loadData, handleSearch, handleTableChange, handleDelete: handleDeleteStore } = useCrudTable<any, typeof searchForm>({
+  searchForm,
+  loadFn: (params) => storeApi.getList({
+    keyword: params.storeName || undefined,
+    page: params.page,
+    pageSize: params.pageSize,
+  }),
+  deleteFn: (id) => storeApi.delete(id),
+  onDeleteSuccess: () => message.success('删除成功'),
+})
 
 const columns = [
   { title: '门店名称', dataIndex: 'storeName', key: 'storeName', width: 140 },
@@ -132,7 +140,7 @@ const modalVisible = ref(false)
 const modalLoading = ref(false)
 const isEdit = ref(false)
 const formRef = ref()
-const formData = reactive({ storeId: '', storeName: '', storeCode: '', regionId: '', address: '', storeType: 'NORMAL' as any, contactPhone: '', businessHours: '', status: 'OPEN' as StoreStatus })
+const formData = reactive({ id: '', storeName: '', storeCode: '', regionId: '', address: '', storeType: 'NORMAL' as any, contactPhone: '', businessHours: '', status: 'OPEN' as StoreStatus })
 
 const formRules = {
   storeName: [{ required: true, message: '请输入门店名称', trigger: 'blur' }],
@@ -140,43 +148,24 @@ const formRules = {
   status: [{ required: true, message: '请选择状态', trigger: 'change' }]
 }
 
-const loadData = async () => {
-  loading.value = true
-  try {
-    const params: any = { page: pagination.current, pageSize: pagination.pageSize }
-    if (searchForm.storeName) params.storeName = searchForm.storeName
-    if (searchForm.status) params.status = searchForm.status
-    const res: any = await storeApi.getList(params)
-    tableData.value = res.list || []
-    pagination.total = res.total || 0
-  } catch (error) {
-    message.error('加载数据失败')
-  } finally { loading.value = false }
-}
-
-const handleSearch = () => { pagination.current = 1; loadData() }
 const handleReset = () => { searchForm.storeName = ''; searchForm.status = undefined; handleSearch() }
-const handleTableChange = (pag: any) => { pagination.current = pag.current; pagination.pageSize = pag.size || pag.pageSize; loadData() }
 const handleCreate = () => { isEdit.value = false; resetForm(); modalVisible.value = true }
 const handleEdit = (record: StoreItem) => {
   isEdit.value = true
   Object.assign(formData, record)
   modalVisible.value = true
 }
-const handleDelete = async (record: StoreItem) => {
-  try { await storeApi.delete(record.storeId); message.success('删除成功'); loadData() }
-  catch { message.error('删除失败') }
-}
+const handleDelete = (record: StoreItem) => { handleDeleteStore(record.id) }
 const handleModalOk = async () => {
   try {
     await formRef.value?.validateFields(); modalLoading.value = true
     const submitData = { storeName: formData.storeName, storeCode: formData.storeCode, regionId: formData.regionId, address: formData.address, storeType: formData.storeType, contactPhone: formData.contactPhone, businessHours: formData.businessHours, status: formData.status }
-    if (isEdit.value) { await storeApi.update(formData.storeId, submitData); message.success('更新成功') }
+    if (isEdit.value) { await storeApi.update(formData.id, submitData); message.success('更新成功') }
     else { await storeApi.create(submitData); message.success('新增成功') }
     modalVisible.value = false; loadData()
   } catch { console.error('表单验证失败') } finally { modalLoading.value = false }
 }
-const resetForm = () => { Object.assign(formData, { storeId: '', storeName: '', storeCode: '', regionId: '', address: '', storeType: 'NORMAL', contactPhone: '', businessHours: '', status: 'OPEN' }) }
+const resetForm = () => { Object.assign(formData, { id: '', storeName: '', storeCode: '', regionId: '', address: '', storeType: 'NORMAL', contactPhone: '', businessHours: '', status: 'OPEN' }) }
 onMounted(() => { loadData() })
 </script>
 

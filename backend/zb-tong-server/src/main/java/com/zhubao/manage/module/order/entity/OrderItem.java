@@ -9,6 +9,7 @@ import java.math.BigDecimal;
 public class OrderItem {
     @TableId(type = IdType.AUTO) private Long id;
     private Long orderId;
+    @TableField(exist = false) private Long productId;
     private String productCode;
     private String productName;
     private String imageUrl;

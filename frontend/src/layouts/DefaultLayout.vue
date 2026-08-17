@@ -46,7 +46,7 @@
             <template v-for="route in menuList" :key="route.path">
               <!-- 单级菜单 -->
               <a-menu-item
-                v-if="!route.children || route.children.length <= 1"
+                v-if="!route.children || route.children.filter(c => !c.meta?.hidden).length <= 1"
                 :key="route.path"
               >
                 <component :is="getIcon(route.meta?.icon as string)" />
@@ -59,12 +59,11 @@
                   <component :is="getIcon(route.meta?.icon as string)" />
                   <span>{{ route.meta?.title }}</span>
                 </template>
-                <a-menu-item
-                  v-for="child in route.children"
-                  :key="`/${route.path}/${child.path}`"
-                >
-                  {{ child.meta?.title }}
-                </a-menu-item>
+                <template v-for="child in route.children" :key="`/${route.path}/${child.path}`">
+                  <a-menu-item v-if="!child.meta?.hidden" :key="`/${route.path}/${child.path}`">
+                    {{ child.meta?.title }}
+                  </a-menu-item>
+                </template>
               </a-sub-menu>
             </template>
           </a-menu>
@@ -116,7 +115,7 @@
             <template v-for="route in menuList" :key="route.path">
               <!-- 单级菜单 -->
               <a-menu-item
-                v-if="!route.children || route.children.length <= 1"
+                v-if="!route.children || route.children.filter(c => !c.meta?.hidden).length <= 1"
                 :key="route.path"
               >
                 <component :is="getIcon(route.meta?.icon as string)" />
@@ -129,12 +128,11 @@
                   <component :is="getIcon(route.meta?.icon as string)" />
                   <span>{{ route.meta?.title }}</span>
                 </template>
-                <a-menu-item
-                  v-for="child in route.children"
-                  :key="`/${route.path}/${child.path}`"
-                >
-                  {{ child.meta?.title }}
-                </a-menu-item>
+                <template v-for="child in route.children" :key="`/${route.path}/${child.path}`">
+                  <a-menu-item v-if="!child.meta?.hidden" :key="`/${route.path}/${child.path}`">
+                    {{ child.meta?.title }}
+                  </a-menu-item>
+                </template>
               </a-sub-menu>
             </template>
           </a-menu>
@@ -205,9 +203,12 @@
             <a-dropdown>
               <div class="header-user">
                 <a-avatar :size="32" style="background-color: #c8a44d">
-                  <template #icon><UserOutlined /></template>
+                  <template #icon>
+                    <img v-if="headerAvatarUrl" :src="headerAvatarUrl" class="header-avatar-img" />
+                    <UserOutlined v-else />
+                  </template>
                 </a-avatar>
-                <span v-if="!isSmallScreen" class="header-username">{{ userInfo.name || userInfo.username }}</span>
+                <span v-if="!isSmallScreen" class="header-username">{{ userInfo.name || userInfo.realName || userInfo.username }}</span>
                 <DownOutlined v-if="!isSmallScreen" style="font-size: 12px; margin-left: 4px" />
               </div>
               <template #overlay>
@@ -255,6 +256,8 @@ import { message } from 'ant-design-vue'
 import { menuRoutes } from '@/router'
 import { useAuthStore } from '@/stores/useAuthStore'
 import { notificationApi } from '@/api/notification'
+import { messageApi } from '@/api/message'
+import { resolveAvatarUrl } from '@/utils/avatar'
 import {
   HomeOutlined,
   ShoppingOutlined,
@@ -297,13 +300,20 @@ const authStore = useAuthStore()
 
 // 通知未读数
 const unreadCount = ref(0)
-// 邮件未读数（暂无后端接口，先静态置 0）
+// 邮件未读数
 const mailUnread = ref(0)
 
 const fetchUnreadCount = async () => {
   try {
-    const res: any = await notificationApi.getUnreadCount()
-    unreadCount.value = res?.count ?? res?.unreadCount ?? 0
+    unreadCount.value = await notificationApi.getUnreadCount()
+  } catch {
+    // 静默失败，不影响页面
+  }
+}
+
+const fetchMailUnread = async () => {
+  try {
+    mailUnread.value = await messageApi.getUnreadCount()
   } catch {
     // 静默失败，不影响页面
   }
@@ -311,6 +321,7 @@ const fetchUnreadCount = async () => {
 
 /* ---------- 用户信息 ---------- */
 const userInfo = computed(() => authStore.userInfo || { username: '管理员', name: '管理员' })
+const headerAvatarUrl = computed(() => resolveAvatarUrl(userInfo.value?.avatar))
 
 const handleUserMenuClick = ({ key }: { key: string }) => {
   if (key === 'logout') {
@@ -418,8 +429,12 @@ let unreadTimer: ReturnType<typeof setInterval> | null = null
 onMounted(() => {
   checkScreen()
   fetchUnreadCount()
+  fetchMailUnread()
   // 每60秒刷新未读数
-  unreadTimer = setInterval(fetchUnreadCount, 60000)
+  unreadTimer = setInterval(() => {
+    fetchUnreadCount()
+    fetchMailUnread()
+  }, 60000)
   window.addEventListener('resize', checkScreen)
 })
 
@@ -603,6 +618,13 @@ dayjs.locale('zh-cn')
   &:hover {
     background: rgba(0,0,0,0.04);
   }
+}
+
+.header-avatar-img {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
 }
 
 .header-username {

@@ -8,6 +8,7 @@ import com.zhubao.manage.common.exception.BusinessException;
 import com.zhubao.manage.common.exception.ErrorCode;
 import com.zhubao.manage.common.interceptor.UserContextHolder;
 import com.zhubao.manage.module.sales.dto.SalesCreateDTO;
+import org.apache.commons.lang3.StringUtils;
 import com.zhubao.manage.module.sales.entity.SalesItem;
 import com.zhubao.manage.module.sales.entity.SalesRecord;
 import com.zhubao.manage.module.sales.mapper.SalesItemMapper;
@@ -66,6 +67,10 @@ public class SalesService {
             item.setMaterial(si.getMaterial());
             item.setWeight(si.getWeight());
             item.setSize(si.getSize());
+            item.setColor(si.getColor());
+            item.setShape(si.getShape());
+            item.setMeaning(si.getMeaning());
+            item.setProductPhotoUrls(si.getProductPhotoUrls());
             item.setPrice(si.getPrice());
             item.setQuantity(si.getQuantity() != null ? si.getQuantity() : 1);
             item.setGrossMarginRate(si.getGrossMarginRate());
@@ -92,10 +97,37 @@ public class SalesService {
 
     // ---- 统计 ----
 
+    /** 全局销售统计（真实汇总） */
+    public Map<String, Object> stats() {
+        List<SalesRecord> all = recordMapper.selectList(
+                new LambdaQueryWrapper<SalesRecord>().eq(SalesRecord::getAuditStatus, "APPROVED"));
+        String today = LocalDate.now().toString();
+        List<SalesRecord> todayList = all.stream()
+                .filter(r -> r.getSalesDate() != null && today.equals(r.getSalesDate().toString()))
+                .collect(Collectors.toList());
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("totalAmount", all.stream().map(SalesRecord::getTotalAmount).filter(Objects::nonNull)
+                .reduce(BigDecimal.ZERO, BigDecimal::add));
+        m.put("orderCount", all.size());
+        m.put("todayAmount", todayList.stream().map(SalesRecord::getTotalAmount).filter(Objects::nonNull)
+                .reduce(BigDecimal.ZERO, BigDecimal::add));
+        return m;
+    }
+
+    public IPage<SalesRecord> page(PageDTO dto, String keyword, Long storeId, Long employeeId,
+                                     String startDate, String endDate, String auditStatus) {
+        LambdaQueryWrapper<SalesRecord> w = new LambdaQueryWrapper<>();
+        if (storeId != null) w.eq(SalesRecord::getStoreId, storeId);
+        if (employeeId != null) w.eq(SalesRecord::getEmployeeId, employeeId);
+        if (StringUtils.isNotBlank(auditStatus)) w.eq(SalesRecord::getAuditStatus, auditStatus);
+        if (StringUtils.isNotBlank(startDate)) w.ge(SalesRecord::getSalesDate, startDate);
+        if (StringUtils.isNotBlank(endDate)) w.le(SalesRecord::getSalesDate, endDate);
+        w.orderByDesc(SalesRecord::getSalesDate);
+        return recordMapper.selectPage(new Page<>(dto.getPageNum(), dto.getPageSize()), w);
+    }
+    // 兼容旧调用
     public IPage<SalesRecord> page(PageDTO dto) {
-        return recordMapper.selectPage(
-                new Page<>(dto.getPageNum(), dto.getPageSize()),
-                new LambdaQueryWrapper<SalesRecord>().orderByDesc(SalesRecord::getSalesDate));
+        return page(dto, null, null, null, null, null, null);
     }
 
     public SalesRecord detail(Long id) {
@@ -160,6 +192,21 @@ public class SalesService {
                         Collectors.reducing(BigDecimal.ZERO, si -> si.getPrice().multiply(BigDecimal.valueOf(si.getQuantity())), BigDecimal::add)))
                 .entrySet().stream().map(e -> { Map<String,Object> m=new LinkedHashMap<>(); m.put("category",e.getKey()); m.put("amount",e.getValue()); return m; })
                 .collect(Collectors.toList());
+    }
+
+    /** 更新销售记录 */
+    public void update(Long id, SalesRecord record) {
+        SalesRecord existing = recordMapper.selectById(id);
+        if (existing == null) throw new BusinessException(ErrorCode.DATA_NOT_FOUND.getCode(), "销售记录不存在");
+        record.setId(id);
+        recordMapper.updateById(record);
+    }
+
+    /** 删除销售记录（逻辑删除，设置 isDeleted=1） */
+    public void delete(Long id) {
+        SalesRecord existing = recordMapper.selectById(id);
+        if (existing == null) throw new BusinessException(ErrorCode.DATA_NOT_FOUND.getCode(), "销售记录不存在");
+        recordMapper.deleteById(id);
     }
 
     private List<SalesRecord> queryByMonth(String month, Long storeId, Long employeeId) {

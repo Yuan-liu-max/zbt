@@ -48,11 +48,8 @@ export const exportReportScores = async (month: string) => {
  */
 export const downloadViaBlob = async (url: string, filename: string) => {
   try {
-    const token = localStorage.getItem('token')
     const response = await fetch(url, {
-      headers: {
-        Authorization: token ? `Bearer ${token}` : '',
-      },
+      credentials: 'include', // 携带 HttpOnly Cookie
     })
 
     if (!response.ok) {

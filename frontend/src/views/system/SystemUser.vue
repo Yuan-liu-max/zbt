@@ -36,8 +36,8 @@
             allow-clear
             style="width: 130px"
           >
-            <a-select-option value="enabled">启用</a-select-option>
-            <a-select-option value="disabled">禁用</a-select-option>
+            <a-select-option value="ENABLED">启用</a-select-option>
+            <a-select-option value="DISABLED">禁用</a-select-option>
           </a-select>
         </a-form-item>
         <a-form-item>
@@ -64,9 +64,12 @@
       >
         <template #bodyCell="{ column, record }">
           <template v-if="column.key === 'status'">
-            <a-tag :color="record.status === 'enabled' ? 'green' : 'red'">
-              {{ record.status === 'enabled' ? '启用' : '禁用' }}
+            <a-tag :color="record.status === 'ENABLED' ? 'green' : 'red'">
+              {{ record.status === 'ENABLED' ? '启用' : '禁用' }}
             </a-tag>
+          </template>
+          <template v-if="column.key === 'roleNames'">
+            {{ (record.roleNames || []).join('、') || '-' }}
           </template>
           <template v-if="column.key === 'action'">
             <div class="action-btns">
@@ -80,11 +83,14 @@
                 </a>
                 <template #overlay>
                   <a-menu @click="({ key }: any) => handleMoreAction(key, record)">
-                    <a-menu-item key="disable" v-if="record.status === 'enabled'">
+                    <a-menu-item key="disable" v-if="record.status === 'ENABLED'">
                       禁用用户
                     </a-menu-item>
                     <a-menu-item key="enable" v-else>
                       启用用户
+                    </a-menu-item>
+                    <a-menu-item key="forceLogout">
+                      强制下线
                     </a-menu-item>
                     <a-menu-item key="delete" class="danger-menu-item">
                       删除用户
@@ -115,25 +121,28 @@
         :wrapper-col="{ span: 16 }"
       >
         <a-form-item label="用户名" name="username">
-          <a-input v-model:value="formData.username" placeholder="请输入用户名" />
+          <a-input v-model:value="formData.username" placeholder="请输入用户名" :disabled="isEdit" />
         </a-form-item>
         <a-form-item label="手机号" name="phone">
           <a-input v-model:value="formData.phone" placeholder="请输入手机号" />
         </a-form-item>
-        <a-form-item label="所属部门" name="department">
-          <a-input v-model:value="formData.department" placeholder="请输入所属部门" />
+        <a-form-item label="职位" name="position">
+          <a-input v-model:value="formData.position" placeholder="请输入职位" />
+        </a-form-item>
+        <a-form-item v-if="!isEdit" label="初始密码" name="password">
+          <a-input-password v-model:value="formData.password" placeholder="默认 123456" />
         </a-form-item>
         <a-form-item label="角色" name="role">
           <a-select v-model:value="formData.role" placeholder="请选择角色">
-            <a-select-option v-for="item in roleOptions" :key="item.id" :value="item.name">
+            <a-select-option v-for="item in roleOptions" :key="item.id" :value="item.id">
               {{ item.name }}
             </a-select-option>
           </a-select>
         </a-form-item>
         <a-form-item label="用户状态" name="status">
           <a-select v-model:value="formData.status" placeholder="请选择状态">
-            <a-select-option value="enabled">启用</a-select-option>
-            <a-select-option value="disabled">禁用</a-select-option>
+            <a-select-option value="ENABLED">启用</a-select-option>
+            <a-select-option value="DISABLED">禁用</a-select-option>
           </a-select>
         </a-form-item>
       </a-form>
@@ -147,6 +156,7 @@ import { message, Modal } from 'ant-design-vue'
 import { PlusOutlined, SearchOutlined, DownOutlined } from '@ant-design/icons-vue'
 import type { UserItem, UserStatus } from '@/types/system'
 import { userApi, roleApi } from '@/api/system'
+import { useCrudTable } from '@/composables/useCrudTable'
 
 // 搜索表单
 const searchForm = reactive({
@@ -156,23 +166,22 @@ const searchForm = reactive({
 })
 
 // 表格数据
-const tableData = ref<UserItem[]>([])
-const loading = ref(false)
-const pagination = reactive({
-  current: 1,
-  size: 10,
-  total: 0,
-  showSizeChanger: true,
-  showQuickJumper: true,
-  showTotal: (total: number) => `共 ${total} 条`
+const { tableData, loading, pagination, loadData, handleSearch, handleTableChange } = useCrudTable({
+  searchForm,
+  loadFn: (params) => userApi.getList({
+    keyword: params.username || params.phone || undefined,
+    status: params.status,
+    page: params.page,
+    pageSize: params.pageSize,
+  }),
 })
 
 // 表格列配置
 const columns = [
   { title: '用户名', dataIndex: 'username', key: 'username', width: 120 },
   { title: '手机号', dataIndex: 'phone', key: 'phone', width: 130 },
-  { title: '所属部门', dataIndex: 'department', key: 'department', width: 120 },
-  { title: '角色', dataIndex: 'role', key: 'role', width: 120 },
+  { title: '职位', dataIndex: 'position', key: 'position', width: 120 },
+  { title: '角色', dataIndex: 'roleNames', key: 'roleNames', width: 150 },
   { title: '用户状态', dataIndex: 'status', key: 'status', width: 90, align: 'center' as const },
   { title: '创建时间', dataIndex: 'createdAt', key: 'createdAt', width: 160 },
   { title: '操作', key: 'action', width: 180, fixed: 'right' as const }
@@ -187,17 +196,16 @@ const formData = reactive({
   id: '',
   username: '',
   phone: '',
-  department: '',
+  position: '',
   role: '' as string,
-  status: 'enabled' as UserStatus
+  password: '',
+  status: 'ENABLED' as UserStatus
 })
 
 const formRules = {
   username: [{ required: true, message: '请输入用户名', trigger: 'blur' }],
   phone: [{ required: true, message: '请输入手机号', trigger: 'blur' }],
-  department: [{ required: true, message: '请输入所属部门', trigger: 'blur' }],
   role: [{ required: true, message: '请选择角色', trigger: 'change' }],
-  status: [{ required: true, message: '请选择用户状态', trigger: 'change' }]
 }
 
 // 角色选项
@@ -206,37 +214,11 @@ const roleOptions = ref<{ id: string; name: string }[]>([])
 // 加载角色列表
 const loadRoles = async () => {
   try {
-    roleOptions.value = await roleApi.getList()
+    const res = await roleApi.getList()
+    roleOptions.value = (res.list || []).map((r: any) => ({ id: String(r.id), name: r.roleName || r.name }))
   } catch {
-    // ignore
+    roleOptions.value = []
   }
-}
-
-// 加载数据
-const loadData = async () => {
-  loading.value = true
-  try {
-    const params = {
-      username: searchForm.username || undefined,
-      phone: searchForm.phone || undefined,
-      status: searchForm.status,
-      page: pagination.current,
-      pageSize: pagination.pageSize
-    }
-    const res = await userApi.getList(params)
-    tableData.value = res.list
-    pagination.total = res.total
-  } catch (error) {
-    message.error('加载数据失败')
-  } finally {
-    loading.value = false
-  }
-}
-
-// 搜索
-const handleSearch = () => {
-  pagination.current = 1
-  loadData()
 }
 
 // 重置搜索
@@ -245,13 +227,6 @@ const handleReset = () => {
   searchForm.phone = ''
   searchForm.status = undefined
   handleSearch()
-}
-
-// 分页
-const handleTableChange = (pag: any) => {
-  pagination.current = pag.current
-  pagination.pageSize = pag.pageSize
-  loadData()
 }
 
 // 新增
@@ -267,8 +242,8 @@ const handleEdit = (record: UserItem) => {
   formData.id = record.id
   formData.username = record.username
   formData.phone = record.phone
-  formData.department = record.department
-  formData.role = record.role
+  formData.position = record.position || ''
+  formData.role = record.roleIds?.[0] ? String(record.roleIds[0]) : ''
   formData.status = record.status
   modalVisible.value = true
 }
@@ -285,32 +260,59 @@ const handleResetPassword = (record: UserItem) => {
 }
 
 // 更多操作
-const handleMoreAction = (key: string, record: UserItem) => {
+const handleMoreAction = async (key: string, record: UserItem) => {
   if (key === 'disable') {
     Modal.confirm({
       title: '禁用用户',
       content: `确定要禁用用户「${record.username}」吗？`,
-      onOk() {
-        record.status = 'disabled'
-        message.success('用户已禁用')
-        loadData()
+      onOk: async () => {
+        try {
+          await userApi.update(record.id, { status: 'DISABLED' })
+          message.success('用户已禁用')
+          loadData()
+        } catch (e) {
+          message.error('操作失败')
+        }
       }
     })
   } else if (key === 'enable') {
-    record.status = 'enabled'
-    message.success('用户已启用')
-    loadData()
+    try {
+      await userApi.update(record.id, { status: 'ENABLED' })
+      message.success('用户已启用')
+      loadData()
+    } catch (e) {
+      message.error('操作失败')
+    }
+  } else if (key === 'forceLogout') {
+    Modal.confirm({
+      title: '强制下线',
+      content: `确定要强制下线用户「${record.username}」吗？该用户的所有登录态将立即失效，需要重新登录。`,
+      okText: '确认下线',
+      okType: 'danger',
+      onOk: async () => {
+        try {
+          await userApi.forceLogout(record.id)
+          message.success('强制下线成功，用户需重新登录')
+          loadData()
+        } catch (e) {
+          message.error('操作失败')
+        }
+      }
+    })
   } else if (key === 'delete') {
     Modal.confirm({
       title: '删除用户',
       content: `确定要删除用户「${record.username}」吗？此操作不可恢复。`,
       okText: '删除',
       okType: 'danger',
-      onOk() {
-        const idx = tableData.value.findIndex(item => item.id === record.id)
-        if (idx !== -1) tableData.value.splice(idx, 1)
-        pagination.total -= 1
-        message.success('删除成功')
+      onOk: async () => {
+        try {
+          await userApi.delete(record.id)
+          message.success('删除成功')
+          loadData()
+        } catch (e) {
+          message.error('删除失败')
+        }
       }
     })
   }
@@ -322,39 +324,30 @@ const handleModalOk = async () => {
     await formRef.value?.validateFields()
     modalLoading.value = true
 
-    // 模拟延迟
-    await new Promise(r => setTimeout(r, 400))
+    const payload: any = {
+      phone: formData.phone,
+      position: formData.position,
+    }
+    const roleIds = formData.role ? [Number(formData.role)] : []
 
     if (isEdit.value) {
-      // 更新本地数据
-      const item = tableData.value.find(i => i.id === formData.id)
-      if (item) {
-        item.username = formData.username
-        item.phone = formData.phone
-        item.department = formData.department
-        item.role = formData.role
-        item.status = formData.status
-      }
+      payload.status = formData.status
+      payload.roleIds = roleIds
+      await userApi.update(formData.id, payload)
       message.success('更新成功')
     } else {
-      // 新增到本地数据
-      const newItem: UserItem = {
-        id: String(Date.now()),
-        username: formData.username,
-        phone: formData.phone,
-        department: formData.department,
-        role: formData.role,
-        status: formData.status,
-        createdAt: new Date().toLocaleString('zh-CN', { hour12: false }).replace(/\//g, '-')
-      }
-      tableData.value.unshift(newItem)
-      pagination.total += 1
+      payload.username = formData.username
+      payload.realName = formData.username
+      payload.password = formData.password || '123456'
+      payload.roleIds = roleIds
+      await userApi.create(payload)
       message.success('新增成功')
     }
 
     modalVisible.value = false
-  } catch (error) {
-    // 表单验证失败，不做处理
+    loadData()
+  } catch (error: any) {
+    message.error(error?.message || '操作失败')
   } finally {
     modalLoading.value = false
   }
@@ -365,9 +358,10 @@ const resetForm = () => {
   formData.id = ''
   formData.username = ''
   formData.phone = ''
-  formData.department = ''
+  formData.position = ''
   formData.role = ''
-  formData.status = 'enabled'
+  formData.password = ''
+  formData.status = 'ENABLED'
 }
 
 onMounted(() => {

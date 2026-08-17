@@ -36,10 +36,9 @@
               allow-clear
               style="width: 150px"
             >
-              <a-select-option value="review">审核任务</a-select-option>
-              <a-select-option value="approval">审批任务</a-select-option>
-              <a-select-option value="process">流程任务</a-select-option>
-              <a-select-option value="general">通用任务</a-select-option>
+              <a-select-option v-for="(info, value) in taskDimensionMap" :key="value" :value="value">
+                {{ info.text }}
+              </a-select-option>
             </a-select>
           </a-form-item>
           <a-form-item label="负责人">
@@ -83,13 +82,13 @@
         <template #bodyCell="{ column, record }">
           <!-- 任务类型 -->
           <template v-if="column.key === 'dimension'">
-            {{ taskTypeMap[record.dimension] || record.dimension }}
+            {{ taskDimensionMap[record.dimension as TaskDimension]?.text || record.dimension }}
           </template>
 
           <!-- 优先级 -->
           <template v-if="column.key === 'priority'">
-            <a-tag :color="priorityMap[record.priority]?.color || 'default'">
-              {{ priorityMap[record.priority]?.text || record.priority }}
+            <a-tag :color="priorityMap[record.priority as TaskPriority]?.color || 'default'">
+              {{ priorityMap[record.priority as TaskPriority]?.text || record.priority }}
             </a-tag>
           </template>
 
@@ -153,21 +152,31 @@
         </a-form-item>
         <a-form-item label="任务类型" name="dimension">
           <a-select v-model:value="formData.dimension" placeholder="请选择任务类型">
-            <a-select-option value="review">审核任务</a-select-option>
-            <a-select-option value="approval">审批任务</a-select-option>
-            <a-select-option value="process">流程任务</a-select-option>
-            <a-select-option value="general">通用任务</a-select-option>
+            <a-select-option v-for="(info, value) in taskDimensionMap" :key="value" :value="value">
+              {{ info.text }}
+            </a-select-option>
           </a-select>
         </a-form-item>
         <a-form-item label="优先级" name="priority">
           <a-select v-model:value="formData.priority" placeholder="请选择优先级">
-            <a-select-option value="high">高</a-select-option>
-            <a-select-option value="medium">中</a-select-option>
-            <a-select-option value="low">低</a-select-option>
+            <a-select-option value="HIGH">高</a-select-option>
+            <a-select-option value="MEDIUM">中</a-select-option>
+            <a-select-option value="LOW">低</a-select-option>
+            <a-select-option value="URGENT">紧急</a-select-option>
           </a-select>
         </a-form-item>
-        <a-form-item label="负责人" name="assigneeName">
-          <a-input v-model:value="formData.assigneeName" placeholder="请输入负责人" />
+        <a-form-item label="负责人" name="assigneeId">
+          <a-select
+            v-model:value="formData.assigneeId"
+            placeholder="请选择负责人"
+            show-search
+            :filter-option="filterOption"
+            allow-clear
+          >
+            <a-select-option v-for="p in personOptions" :key="p.value" :value="p.value">
+              {{ p.label }}
+            </a-select-option>
+          </a-select>
         </a-form-item>
         <a-form-item label="开始时间" name="startTime">
           <a-date-picker
@@ -191,9 +200,14 @@
     </a-modal>
     <a-modal v-model:open="detailVisible" title="详情" :footer="null" width="600px">
       <a-descriptions :column="2" bordered size="small">
-        <a-descriptions-item v-for="(val, key) in detailRecord" :key="key" :label="String(key)" :span="typeof val === 'object' ? 2 : 1">
-          {{ typeof val === 'object' ? JSON.stringify(val) : val }}
-        </a-descriptions-item>
+        <a-descriptions-item label="任务名称">{{ detailRecord?.taskTitle }}</a-descriptions-item>
+        <a-descriptions-item label="任务编号">{{ detailRecord?.taskNo }}</a-descriptions-item>
+        <a-descriptions-item label="任务类型">{{ taskDimensionMap[detailRecord?.dimension as TaskDimension]?.text || detailRecord?.dimension }}</a-descriptions-item>
+        <a-descriptions-item label="状态">{{ taskStatusMap[detailRecord?.status as TaskStatus]?.text || detailRecord?.status }}</a-descriptions-item>
+        <a-descriptions-item label="优先级">{{ priorityMap[detailRecord?.priority as TaskPriority]?.text || detailRecord?.priority }}</a-descriptions-item>
+        <a-descriptions-item label="负责人">{{ detailRecord?.assigneeName }}</a-descriptions-item>
+        <a-descriptions-item label="开始时间">{{ detailRecord?.startTime }}</a-descriptions-item>
+        <a-descriptions-item label="截止时间">{{ detailRecord?.dueTime }}</a-descriptions-item>
       </a-descriptions>
     </a-modal>
   </div>
@@ -213,34 +227,24 @@ import {
   CloseCircleOutlined
 } from '@ant-design/icons-vue'
 import type { TaskItem, TaskStatus, TaskDimension, TaskPriority } from '@/types/task'
-import { taskApi } from '@/api/task'
+import { taskApi, taskStatusMap, taskDimensionMap, priorityMap } from '@/api/task'
+import { userApi } from '@/api/system'
+import { useCrudTable } from '@/composables/useCrudTable'
+import { useDetailModal } from '@/composables/useDetailModal'
 const router = useRouter()
-
-// 本地映射表
-const taskTypeMap: Record<string, string> = { HUMAN: '人效', PRODUCT: '货品', SCENE: '场景', COMPREHENSIVE: '综合' }
-const priorityMap: Record<string, { text: string; color: string }> = {
-  LOW: { text: '低', color: 'blue' },
-  MEDIUM: { text: '中', color: 'orange' },
-  HIGH: { text: '高', color: 'red' },
-  URGENT: { text: '紧急', color: 'magenta' },
-}
-const taskStatusMap: Record<string, { text: string; color: string }> = {
-  PENDING: { text: '待处理', color: 'default' },
-  READY: { text: '就绪', color: 'blue' },
-  IN_PROGRESS: { text: '进行中', color: 'processing' },
-  SUBMITTED: { text: '已提交', color: 'cyan' },
-  AUDITING: { text: '审核中', color: 'purple' },
-  APPROVED: { text: '已通过', color: 'green' },
-  COMPLETED: { text: '已完成', color: 'green' },
-  REJECTED: { text: '已拒绝', color: 'red' },
-  RECTIFYING: { text: '整改中', color: 'orange' },
-  OVERDUE: { text: '已逾期', color: 'red' },
-  CANCELLED: { text: '已取消', color: 'default' },
-  VOIDED: { text: '已作废', color: 'default' },
-}
 
 // 当前激活的标签页
 const activeTab = ref<string>('all')
+
+// 标签页 -> 任务状态映射（全部不传 status）
+const tabStatusMap: Record<string, TaskStatus | undefined> = {
+  all: undefined,
+  in_progress: 'IN_PROGRESS',
+  completed: 'COMPLETED',
+  overdue: 'OVERDUE',
+  cancelled: 'CANCELLED',
+}
+const tabStatus = ref<TaskStatus | undefined>(undefined)
 
 // 搜索表单
 const searchForm = reactive({
@@ -250,16 +254,17 @@ const searchForm = reactive({
   dateRange: null as [string, string] | null
 })
 
-// 表格数据
-const tableData = ref<TaskItem[]>([])
-const loading = ref(false)
-const pagination = reactive({
-  current: 1,
-  size: 10,
-  total: 0,
-  showSizeChanger: true,
-  showQuickJumper: true,
-  showTotal: (total: number) => `共 ${total} 条`
+// 表格数据（useCrudTable 封装）
+const { tableData, loading, pagination, loadData, handleSearch, handleTableChange } = useCrudTable<any, typeof searchForm>({
+  searchForm,
+  loadFn: (params) => {
+    const p: any = { ...params }
+    if (tabStatus.value) p.status = tabStatus.value
+    if (p.dateRange?.[0]) p.startDate = p.dateRange[0]
+    if (p.dateRange?.[1]) p.endDate = p.dateRange[1]
+    delete p.dateRange
+    return taskApi.getList(p)
+  },
 })
 
 // 表格列配置
@@ -274,9 +279,8 @@ const columns = computed(() => [
   { title: '操作', key: 'action', width: 160, fixed: 'right' as const }
 ])
 
-// 详情弹窗
-const detailVisible = ref(false)
-const detailRecord = ref<any>(null)
+// 详情弹窗（useDetailModal 封装）
+const { detailVisible, detailRecord, openDetail } = useDetailModal<TaskItem>()
 
 // 弹窗相关
 const modalVisible = ref(false)
@@ -288,67 +292,62 @@ const formData = reactive({
   taskTitle: '',
   dimension: undefined as TaskDimension | undefined,
   priority: 'MEDIUM' as TaskPriority,
-  assigneeName: '',
+  assigneeId: undefined as string | undefined,
   startTime: null as any,
-  dueTime: null as any
+  dueTime: null as any,
+  status: 'PENDING' as TaskStatus
 })
 
 const formRules = {
   taskTitle: [{ required: true, message: '请输入任务名称', trigger: 'blur' }],
   dimension: [{ required: true, message: '请选择任务类型', trigger: 'change' }],
   priority: [{ required: true, message: '请选择优先级', trigger: 'change' }],
-  assigneeName: [{ required: true, message: '请输入负责人', trigger: 'blur' }],
+  assigneeId: [{ required: true, message: '请选择负责人', trigger: 'change' }],
   startTime: [{ required: true, message: '请选择开始时间', trigger: 'change' }],
   dueTime: [{ required: true, message: '请选择截止时间', trigger: 'change' }]
 }
 
-// 加载数据
-const loadData = async () => {
-  loading.value = true
+// 负责人下拉：真实用户列表（GET /users）
+interface UserOption {
+  value: string
+  label: string
+}
+const personOptions = ref<UserOption[]>([])
+const loadUsers = async () => {
   try {
-    const params: any = {
-      keyword: searchForm.keyword || undefined,
-      dimension: searchForm.dimension,
-      page: pagination.current,
-      pageSize: pagination.pageSize
-    }
-    const res: any = await taskApi.getList(params)
-    tableData.value = res.list || []
-    pagination.total = res.total || 0
-  } catch {
-    message.error('加载数据失败')
-  } finally {
-    loading.value = false
+    const res = await userApi.getList({ page: 1, pageSize: 999 })
+    personOptions.value = (res.list || []).map((u) => ({
+      value: String(u.id),
+      label: u.realName || u.username,
+    }))
+  } catch (error) {
+    console.error('加载用户列表失败', error)
   }
 }
 
+const filterOption = (input: string, option: any) => {
+  return (
+    String(option?.label || '').toLowerCase().includes(input.toLowerCase()) ||
+    String(option?.value || '').toLowerCase().includes(input.toLowerCase())
+  )
+}
+
 // 标签页切换
-const handleTabChange = () => {
+const handleTabChange = (key: string) => {
+  tabStatus.value = tabStatusMap[key]
   pagination.current = 1
   loadData()
 }
 
-// 搜索
-const handleSearch = () => {
-  pagination.current = 1
-  loadData()
-}
-
-// 重置
+// 重置（扩展：同时重置标签页）
 const handleReset = () => {
   searchForm.keyword = ''
   searchForm.dimension = undefined
   searchForm.assignee = ''
   searchForm.dateRange = null
   activeTab.value = 'all'
+  tabStatus.value = undefined
   handleSearch()
-}
-
-// 表格分页
-const handleTableChange = (pag: any) => {
-  pagination.current = pag.current || 1
-  pagination.pageSize = pag.size || 10
-  loadData()
 }
 
 // 跳转创建页
@@ -357,10 +356,7 @@ const handleCreate = () => {
 }
 
 // 查看详情
-const handleDetail = (record: TaskItem) => {
-  detailRecord.value = record
-  detailVisible.value = true
-}
+const handleDetail = openDetail
 
 // 编辑
 const handleEdit = (record: TaskItem) => {
@@ -369,9 +365,10 @@ const handleEdit = (record: TaskItem) => {
   formData.taskTitle = record.taskTitle
   formData.dimension = record.dimension
   formData.priority = record.priority
-  formData.assigneeName = record.assigneeName
+  formData.assigneeId = String(record.assigneeId ?? '')
   formData.startTime = record.startTime
   formData.dueTime = record.dueTime
+  formData.status = record.status
   modalVisible.value = true
 }
 
@@ -392,28 +389,29 @@ const handleMoreAction = async (key: string, record: TaskItem) => {
         priority: record.priority,
         assigneeName: record.assigneeName,
         storeId: record.storeId,
+        startTime: record.startTime,
         dueTime: record.dueTime
       })
       message.success('复制成功')
       loadData()
-    } catch {
-      message.error('复制失败')
+    } catch (error) {
+      console.error('复制失败', error)
     }
   } else if (key === 'complete') {
     try {
       await taskApi.update(String(record.id), { status: 'COMPLETED' })
       message.success('任务已标记为完成')
       loadData()
-    } catch {
-      message.error('操作失败')
+    } catch (error) {
+      console.error('操作失败', error)
     }
   } else if (key === 'cancel') {
     try {
       await taskApi.update(String(record.id), { status: 'CANCELLED' })
       message.success('任务已取消')
       loadData()
-    } catch {
-      message.error('操作失败')
+    } catch (error) {
+      console.error('操作失败', error)
     }
   }
 }
@@ -422,15 +420,20 @@ const handleMoreAction = async (key: string, record: TaskItem) => {
 const handleModalOk = async () => {
   try {
     await formRef.value?.validateFields()
-    modalLoading.value = true
+  } catch {
+    return
+  }
 
+  modalLoading.value = true
+  try {
     const submitData: any = {
       taskTitle: formData.taskTitle,
       dimension: formData.dimension!,
       priority: formData.priority,
-      assigneeName: formData.assigneeName,
+      assigneeId: formData.assigneeId ? Number(formData.assigneeId) : undefined,
       startTime: formData.startTime,
-      dueTime: formData.dueTime
+      dueTime: formData.dueTime,
+      status: formData.status
     }
 
     if (isEdit.value) {
@@ -444,7 +447,7 @@ const handleModalOk = async () => {
     modalVisible.value = false
     loadData()
   } catch {
-    // validation failed
+    message.error('操作失败')
   } finally {
     modalLoading.value = false
   }
@@ -452,6 +455,7 @@ const handleModalOk = async () => {
 
 onMounted(() => {
   loadData()
+  loadUsers()
 })
 </script>
 

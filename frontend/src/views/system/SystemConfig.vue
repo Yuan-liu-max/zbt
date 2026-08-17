@@ -68,8 +68,6 @@
                 <a-form-item label="系统LOGO" name="logo">
                   <a-upload
                     v-model:file-list="logoFileList"
-                    action="/api/files/upload"
-                    :headers="{ Authorization: `Bearer ${localStorage.getItem('token') || ''}` }"
                     list-type="picture-card"
                     :before-upload="handleLogoBeforeUpload"
                     :max-count="1"
@@ -178,7 +176,7 @@
               </a-col>
               <a-col :xs="24" :sm="24" :md="12">
                 <a-form-item label="邮箱密码">
-                  <a-input-password v-model:value="emailForm.senderPassword" placeholder="请输入邮箱密码" />
+                  <a-input-password v-model:value="emailForm.senderPassword" :placeholder="sensitivePlaceholder('email', 'senderPassword', '请输入邮箱密码')" />
                 </a-form-item>
               </a-col>
             </a-row>
@@ -225,7 +223,7 @@
             <a-row :gutter="24">
               <a-col :xs="24" :sm="24" :md="12">
                 <a-form-item label="AccessSecret">
-                  <a-input-password v-model:value="smsForm.accessSecret" placeholder="请输入AccessSecret" />
+                  <a-input-password v-model:value="smsForm.accessSecret" :placeholder="sensitivePlaceholder('sms', 'accessSecret', '请输入AccessSecret')" />
                 </a-form-item>
               </a-col>
               <a-col :xs="24" :sm="24" :md="12">
@@ -278,7 +276,7 @@
               </a-col>
               <a-col :xs="24" :sm="24" :md="12">
                 <a-form-item label="密钥">
-                  <a-input-password v-model:value="paymentForm.secretKey" placeholder="请输入密钥" />
+                  <a-input-password v-model:value="paymentForm.secretKey" :placeholder="sensitivePlaceholder('payment', 'secretKey', '请输入密钥')" />
                 </a-form-item>
               </a-col>
             </a-row>
@@ -331,7 +329,7 @@
               </a-col>
               <a-col :xs="24" :sm="24" :md="12">
                 <a-form-item label="AccessSecret">
-                  <a-input-password v-model:value="storageForm.accessSecret" placeholder="请输入AccessSecret" />
+                  <a-input-password v-model:value="storageForm.accessSecret" :placeholder="sensitivePlaceholder('storage', 'accessSecret', '请输入AccessSecret')" />
                 </a-form-item>
               </a-col>
             </a-row>
@@ -469,8 +467,9 @@
 import { ref, reactive, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
 import { SaveOutlined, ReloadOutlined, PlusOutlined, SettingOutlined, MailOutlined, MessageOutlined, WalletOutlined, CloudOutlined, SafetyOutlined, AppstoreOutlined } from '@ant-design/icons-vue'
-import type { SystemConfig } from '@/types/system'
+import type { SystemConfig, SystemConfigItem } from '@/types/system'
 import { configApi } from '@/api/system'
+import request from '@/utils/request'
 import type { UploadChangeParam, UploadFile } from 'ant-design-vue'
 
 // 当前选中的配置分类
@@ -528,14 +527,29 @@ const handleLogoBeforeUpload = (file: File) => {
     message.error('图片大小不能超过2MB')
     return false
   }
-  return false // 阻止默认上传行为
+  // 手动上传到后端，成功后把 fileUrl 存到 formState.logo
+  const uploadForm = new FormData()
+  uploadForm.append('file', file)
+  request
+    .post('/files/upload', uploadForm)
+    .then((res: any) => {
+      const fileUrl = res?.fileUrl
+      if (!fileUrl) throw new Error('上传失败')
+      formState.logo = fileUrl
+      logoFileList.value = [{ uid: '-1', name: file.name, status: 'done', url: fileUrl }]
+      message.success('LOGO上传成功')
+    })
+    .catch((error) => {
+      console.error('LOGO上传失败', error)
+      message.error('LOGO上传失败')
+    })
+  return false
 }
 
 const handleLogoChange = (info: UploadChangeParam) => {
   if (info.file.status === 'removed') {
     formState.logo = ''
-  } else if (info.file.originFileObj) {
-    formState.logo = info.file.name
+    logoFileList.value = []
   }
 }
 
@@ -598,38 +612,188 @@ const otherForm = reactive({
   pageSize: 20,
 })
 
+// 配置分组与表单字段映射（表单字段 -> 后端 configKey）
+interface ConfigDef {
+  group: string
+  form: Record<string, any>
+  fields: { key: string; field: string; type?: 'bool' | 'number'; sensitive?: boolean }[]
+}
+
+// 敏感字段：加载时不回显真实值，仅提示"已配置，留空则不修改"，保存时空值不提交
+const sensitiveConfigured = reactive<Record<string, boolean>>({})
+const sensitiveKey = (group: string, field: string) => `${group}.${field}`
+const isSensitiveConfigured = (group: string, field: string) => !!sensitiveConfigured[sensitiveKey(group, field)]
+const sensitivePlaceholder = (group: string, field: string, defaultText: string) =>
+  isSensitiveConfigured(group, field) ? '已配置，留空则不修改' : defaultText
+
+const configGroups: ConfigDef[] = [
+  {
+    group: 'basic', form: formState as unknown as Record<string, any>,
+    fields: [
+      { key: 'systemName', field: 'systemName' },
+      { key: 'language', field: 'language' },
+      { key: 'timezone', field: 'timezone' },
+      { key: 'dateFormat', field: 'dateFormat' },
+      { key: 'timeFormat', field: 'timeFormat' },
+      { key: 'logo', field: 'logo' },
+      { key: 'description', field: 'description' },
+      { key: 'icpNumber', field: 'icpNumber' },
+      { key: 'homeUrl', field: 'homeUrl' },
+      { key: 'version', field: 'version' },
+      { key: 'copyright', field: 'copyright' },
+    ],
+  },
+  {
+    group: 'email', form: emailForm,
+    fields: [
+      { key: 'smtpHost', field: 'smtpHost' },
+      { key: 'smtpPort', field: 'smtpPort', type: 'number' },
+      { key: 'senderEmail', field: 'senderEmail' },
+      { key: 'senderPassword', field: 'senderPassword', sensitive: true },
+      { key: 'sslEnabled', field: 'sslEnabled', type: 'bool' },
+      { key: 'senderName', field: 'senderName' },
+    ],
+  },
+  {
+    group: 'sms', form: smsForm,
+    fields: [
+      { key: 'provider', field: 'provider' },
+      { key: 'accessKey', field: 'accessKey' },
+      { key: 'accessSecret', field: 'accessSecret', sensitive: true },
+      { key: 'signName', field: 'signName' },
+      { key: 'templateId', field: 'templateId' },
+    ],
+  },
+  {
+    group: 'payment', form: paymentForm,
+    fields: [
+      { key: 'platform', field: 'platform' },
+      { key: 'merchantId', field: 'merchantId' },
+      { key: 'appId', field: 'appId' },
+      { key: 'secretKey', field: 'secretKey', sensitive: true },
+      { key: 'notifyUrl', field: 'notifyUrl' },
+      { key: 'sandboxMode', field: 'sandboxMode', type: 'bool' },
+    ],
+  },
+  {
+    group: 'storage', form: storageForm,
+    fields: [
+      { key: 'type', field: 'type' },
+      { key: 'path', field: 'path' },
+      { key: 'accessKey', field: 'accessKey' },
+      { key: 'accessSecret', field: 'accessSecret', sensitive: true },
+      { key: 'bucket', field: 'bucket' },
+      { key: 'endpoint', field: 'endpoint' },
+    ],
+  },
+  {
+    group: 'security', form: securityForm,
+    fields: [
+      { key: 'captchaEnabled', field: 'captchaEnabled', type: 'bool' },
+      { key: 'passwordStrength', field: 'passwordStrength', type: 'bool' },
+      { key: 'loginLockEnabled', field: 'loginLockEnabled', type: 'bool' },
+      { key: 'maxFailCount', field: 'maxFailCount', type: 'number' },
+      { key: 'sessionTimeout', field: 'sessionTimeout', type: 'number' },
+      { key: 'ipWhitelist', field: 'ipWhitelist' },
+    ],
+  },
+  {
+    group: 'other', form: otherForm,
+    fields: [
+      { key: 'maintenanceMode', field: 'maintenanceMode', type: 'bool' },
+      { key: 'debugMode', field: 'debugMode', type: 'bool' },
+      { key: 'logLevel', field: 'logLevel' },
+      { key: 'cacheExpire', field: 'cacheExpire', type: 'number' },
+      { key: 'maxFileSize', field: 'maxFileSize', type: 'number' },
+      { key: 'pageSize', field: 'pageSize', type: 'number' },
+    ],
+  },
+]
+
 // 切换配置分类
 const handleMenuClick = (info: { key: string }) => {
   selectedKey.value = info.key
 }
 
-// 加载配置
+// LOGO 回显
+const syncLogoFileList = () => {
+  logoFileList.value = formState.logo
+    ? [{ uid: '-1', name: formState.logo, status: 'done', url: formState.logo }]
+    : []
+}
+
+// 加载配置（按 configGroup 分组加载，填入对应表单）
 const loadConfig = async () => {
   try {
-    const config = await configApi.getConfig()
-    Object.assign(formState, config)
+    const tasks = configGroups.map(async ({ group, form, fields }) => {
+      try {
+        const list = await configApi.getList(group)
+        const valueMap = new Map(list.map((item) => [item.configKey, item.configValue]))
+        fields.forEach(({ key, field, type, sensitive }) => {
+          const raw = valueMap.get(key)
+          if (raw == null) return
+          if (sensitive) {
+            // 敏感字段不回显，仅标记"已配置"，空值保存时不会覆盖
+            sensitiveConfigured[sensitiveKey(group, field)] = raw !== ''
+            form[field] = ''
+            return
+          }
+          if (type === 'bool') form[field] = raw === 'true'
+          else if (type === 'number') form[field] = Number(raw) || 0
+          else form[field] = raw
+        })
+      } catch (e) {
+        console.error(`加载配置组 ${group} 失败`, e)
+      }
+    })
+    await Promise.all(tasks)
+    syncLogoFileList()
   } catch (error) {
-    message.error('加载配置失败')
+    console.error('加载配置失败', error)
   }
 }
 
-// 保存配置
+// 保存配置（每个分组逐个 try/catch，收集失败分组并细化提示）
+const groupLabel = (group: string) => menuItems.find(m => m.key === group)?.label || group
+
 const handleSave = async () => {
   saving.value = true
-  try {
-    await configApi.saveConfig(formState)
+  const failedGroups: string[] = []
+  await Promise.all(
+    configGroups.map(async ({ group, form, fields }) => {
+      const configs: SystemConfigItem[] = fields
+        .filter(({ field, sensitive }) => {
+          const value = form[field]
+          // 敏感字段空值不提交（非空才提交）；非敏感字段允许空字符串提交，用于清空
+          if (sensitive) return value !== undefined && value !== null && value !== ''
+          return value !== undefined && value !== null
+        })
+        .map(({ key, field, type }, index) => ({
+          configKey: key,
+          configGroup: group,
+          configValue: type === 'bool' ? (form[field] ? 'true' : 'false') : String(form[field]),
+          sortOrder: index,
+          status: 'ENABLED',
+        }))
+      try {
+        await configApi.save(configs)
+      } catch (error) {
+        console.error(`保存配置组 ${group} 失败`, error)
+        failedGroups.push(group)
+      }
+    })
+  )
+  if (failedGroups.length === 0) {
     message.success('配置保存成功')
-  } catch (error) {
-    message.error('保存配置失败')
-  } finally {
-    saving.value = false
+  } else {
+    message.error(`${failedGroups.map(g => groupLabel(g)).join('、')}保存失败`)
   }
+  saving.value = false
 }
 
 // 重置配置
 const handleReset = async () => {
   await loadConfig()
-  logoFileList.value = []
   message.info('配置已重置')
 }
 

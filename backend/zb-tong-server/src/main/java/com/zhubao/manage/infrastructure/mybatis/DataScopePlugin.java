@@ -30,23 +30,35 @@ public class DataScopePlugin implements Interceptor {
 
     @Override
     public Object intercept(Invocation invocation) throws Throwable {
-        UserContext ctx = userContextHolder.get();
-        if (ctx == null || ctx.getUserId() == null) return invocation.proceed();
+        try {
+            UserContext ctx = userContextHolder.get();
+            if (ctx == null || ctx.getUserId() == null) return invocation.proceed();
 
-        StatementHandler handler = (StatementHandler) invocation.getTarget();
-        BoundSql boundSql = handler.getBoundSql();
-        String originalSql = boundSql.getSql().trim();
+            StatementHandler handler = (StatementHandler) invocation.getTarget();
+            BoundSql boundSql = handler.getBoundSql();
+            String originalSql = boundSql.getSql().trim();
 
-        if (!originalSql.toUpperCase().startsWith("SELECT")) return invocation.proceed();
+            // 只处理单表简单 SELECT，跳过复杂查询
+            String upper = originalSql.toUpperCase();
+            if (!upper.startsWith("SELECT")) return invocation.proceed();
+            if (upper.contains(" UNION ") || upper.contains(" JOIN ")
+                || upper.contains("COUNT(") || upper.contains("SUM(")
+                || upper.contains(" DISTINCT ") || upper.contains("SUBQUERY")) {
+                return invocation.proceed();  // 复杂查询跳过不注入
+            }
 
-        String level = ctx.getDataScopeLevel();
-        if (level == null || "ALL".equals(level)) return invocation.proceed();
+            String level = ctx.getDataScopeLevel();
+            if (level == null || "ALL".equals(level) || "NONE".equals(level)) return invocation.proceed();
 
-        String condition = buildCondition(level, ctx);
-        if (condition == null || condition.isEmpty()) return invocation.proceed();
+            String condition = buildCondition(level, ctx);
+            if (condition == null || condition.isEmpty()) return invocation.proceed();
 
-        String newSql = injectCondition(originalSql, condition);
-        SystemMetaObject.forObject(handler).setValue("delegate.boundSql.sql", newSql);
+            String newSql = injectCondition(originalSql, condition);
+            SystemMetaObject.forObject(handler).setValue("delegate.boundSql.sql", newSql);
+
+        } catch (Exception e) {
+            log.warn("数据权限注入失败，跳过: {}", e.getMessage());
+        }
         return invocation.proceed();
     }
 

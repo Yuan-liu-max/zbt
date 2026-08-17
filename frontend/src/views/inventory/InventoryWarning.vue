@@ -80,8 +80,8 @@
             allow-clear
             style="width: 150px"
           >
-            <a-select-option v-for="wh in warehouses" :key="wh.id" :value="wh.name">
-              {{ wh.name }}
+            <a-select-option v-for="s in warehouses" :key="s.id" :value="s.name">
+              {{ s.name }}
             </a-select-option>
           </a-select>
         </a-form-item>
@@ -128,16 +128,16 @@
             </a-tag>
           </template>
           <template v-if="column.key === 'status'">
-            <a-tag :color="record.status === 'pending' ? 'orange' : 'green'">
-              {{ record.status === 'pending' ? '未处理' : '已处理' }}
+            <a-tag :color="record.status === 'handled' ? 'green' : 'orange'">
+              {{ record.status === 'handled' ? '已处理' : '未处理' }}
             </a-tag>
           </template>
           <template v-if="column.key === 'action'">
             <div class="action-btns">
-              <a v-if="record.status === 'pending'" @click="handleProcess(record)" class="action-link primary">
-                处理
-              </a>
-              <a-divider v-if="record.status === 'pending'" type="vertical" />
+              <template v-if="!isHandled(record)">
+                <a @click="handleProcess(record)" class="action-link primary">处理</a>
+                <a-divider type="vertical" />
+              </template>
               <a @click="handleDetail(record)" class="action-link">详情</a>
             </div>
           </template>
@@ -166,15 +166,16 @@ import {
   CarOutlined
 } from '@ant-design/icons-vue'
 import { exportComingSoon } from '@/utils/export'
-import type { InventoryWarningItem, InventoryStats, InventoryWarningParams, WarningType } from '@/types/goods'
-import { inventoryWarningApi } from '@/api/goods'
+import { useCrudTable } from '@/composables/useCrudTable'
+import { useDetailModal } from '@/composables/useDetailModal'
+import type { InventoryWarningItem, InventoryStats, WarningType, StoreItem } from '@/types/goods'
+import { inventoryWarningApi, storeApi } from '@/api/goods'
 
-// 仓库数据
-const warehouses = [
-  { id: '1', name: '深圳总仓' },
-  { id: '2', name: '北京分仓' },
-  { id: '3', name: '上海分仓' },
-]
+// 仓库数据 — 从门店列表加载
+const warehouses = ref<StoreItem[]>([])
+
+// 判断预警是否已处理（后端返回真实状态）
+const isHandled = (record: InventoryWarningItem) => record.status === 'handled'
 
 // 预警统计
 const alertSummary = reactive<InventoryStats>({
@@ -184,10 +185,6 @@ const alertSummary = reactive<InventoryStats>({
   transitTimeoutCount: 0
 })
 
-// 详情弹窗
-const detailVisible = ref(false)
-const detailRecord = ref<any>(null)
-
 // 搜索表单
 const searchForm = reactive({
   alertType: undefined as WarningType | undefined,
@@ -196,17 +193,14 @@ const searchForm = reactive({
   status: undefined as 'pending' | 'handled' | undefined
 })
 
-// 表格数据
-const tableData = ref<InventoryWarningItem[]>([])
-const loading = ref(false)
-const pagination = reactive({
-  current: 1,
-  size: 10,
-  total: 0,
-  showSizeChanger: true,
-  showQuickJumper: true,
-  showTotal: (total: number) => `共 ${total} 条`
+// CRUD 表格逻辑
+const { tableData, loading, pagination, loadData, handleSearch, handleTableChange } = useCrudTable({
+  searchForm,
+  loadFn: (params) => inventoryWarningApi.getList(params as any),
 })
+
+// 详情弹窗
+const { detailVisible, detailRecord, openDetail } = useDetailModal<InventoryWarningItem>()
 
 // 表格列配置
 const columns = [
@@ -255,34 +249,6 @@ const loadSummary = async () => {
   }
 }
 
-// 加载数据
-const loadData = async () => {
-  loading.value = true
-  try {
-    const params: InventoryWarningParams = {
-      alertType: searchForm.alertType,
-      keyword: searchForm.keyword || undefined,
-      warehouse: searchForm.warehouse,
-      status: searchForm.status,
-      page: pagination.current,
-      pageSize: pagination.pageSize
-    }
-    const res = await inventoryWarningApi.getList(params)
-    tableData.value = res.list
-    pagination.total = res.total
-  } catch (error) {
-    message.error('加载数据失败')
-  } finally {
-    loading.value = false
-  }
-}
-
-// 搜索
-const handleSearch = () => {
-  pagination.current = 1
-  loadData()
-}
-
 // 重置
 const handleReset = () => {
   searchForm.alertType = undefined
@@ -297,34 +263,32 @@ const handleExport = () => {
   exportComingSoon('库存预警数据')
 }
 
-// 表格分页
-const handleTableChange = (pag: any) => {
-  pagination.current = pag.current
-  pagination.pageSize = pag.pageSize
-  loadData()
-}
-
 // 处理预警
 const handleProcess = (record: InventoryWarningItem) => {
   Modal.confirm({
-    title: '确认处理',
-    content: `确定要处理 ${record.productName} 的预警吗？`,
+    title: `处理预警 - ${record.productName}`,
+    content: `当前库存 ${record.currentQty}，安全库存 ${record.safetyStock}。是否标记为已处理？`,
+    okText: '确认处理',
     onOk: async () => {
-      await inventoryWarningApi.handleAlert(record.id)
-      message.success('处理成功')
-      loadData()
-      loadSummary()
+      try {
+        await inventoryWarningApi.handleAlert(record.id)
+        message.success('已标记处理')
+        loadData()
+        loadSummary()
+      } catch {
+        message.error('处理失败')
+      }
     }
   })
 }
 
 // 详情
 const handleDetail = (record: InventoryWarningItem) => {
-  detailRecord.value = record
-  detailVisible.value = true
+  openDetail(record)
 }
 
-onMounted(() => {
+onMounted(async () => {
+  try { warehouses.value = await storeApi.getAll() } catch {}
   loadSummary()
   loadData()
 })

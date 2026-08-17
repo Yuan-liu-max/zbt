@@ -4,6 +4,7 @@ import { resolve } from 'path'
 
 // https://vite.dev/config/
 export default defineConfig({
+  base: '/admin/',
   plugins: [vue()],
   resolve: {
     alias: {
@@ -21,12 +22,18 @@ export default defineConfig({
     },
   },
   server: {
-    port: 3000,
+    port: 5000,
+    host: true,
     open: true,
     proxy: {
       '/api': {
         target: 'http://localhost:8080',
         changeOrigin: true,
+      },
+      '/files': {
+        target: 'http://localhost:8080',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/files/, '/api/files'),
       },
     },
   },

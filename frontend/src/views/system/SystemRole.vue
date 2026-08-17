@@ -21,8 +21,14 @@
             :class="{ active: selectedRoleId === role.id }"
             @click="handleSelectRole(role)"
           >
-            <div class="role-name">{{ role.name }}</div>
-            <div class="role-desc">{{ role.description || '暂无描述' }}</div>
+            <div class="role-name">{{ role.roleName }}</div>
+            <div class="role-desc">{{ role.remark || '暂无描述' }}</div>
+            <a-popconfirm v-if="!isBuiltinRole(role)" title="确定删除该角色吗？" @confirm="handleDeleteRole(role)">
+              <DeleteOutlined class="role-delete" @click.stop />
+            </a-popconfirm>
+            <a-tooltip v-else title="内置角色不可删除">
+              <DeleteOutlined class="role-delete role-delete-disabled" @click.stop />
+            </a-tooltip>
           </div>
         </div>
       </div>
@@ -36,6 +42,12 @@
                 <div class="info-field">
                   <span class="field-label">角色名称：</span>
                   <a-input v-model:value="editName" placeholder="请输入角色名称" style="width: 200px" />
+                </div>
+                <div class="info-field">
+                  <span class="field-label">数据权限：</span>
+                  <a-select v-model:value="editDataScope" style="width: 180px">
+                    <a-select-option v-for="opt in dataScopeOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</a-select-option>
+                  </a-select>
                 </div>
                 <div class="info-field">
                   <span class="field-label">角色描述：</span>
@@ -63,7 +75,7 @@
                   default-expand-all
                 />
               </a-tab-pane>
-              <a-tab-pane key="data" tab="数据权限">
+              <a-tab-pane key="data" tab="按钮权限">
                 <div class="tree-toolbar">
                   <a-checkbox v-model:checked="dataCheckAll" @change="handleDataCheckAll">全选</a-checkbox>
                 </div>
@@ -75,7 +87,7 @@
                   default-expand-all
                 />
               </a-tab-pane>
-              <a-tab-pane key="action" tab="操作权限">
+              <a-tab-pane key="action" tab="API 权限">
                 <div class="tree-toolbar">
                   <a-checkbox v-model:checked="actionCheckAll" @change="handleActionCheckAll">全选</a-checkbox>
                 </div>
@@ -99,8 +111,16 @@
     <!-- 新增角色弹窗 -->
     <a-modal v-model:open="addModalVisible" title="新增角色" @ok="handleAddRoleOk" :confirm-loading="saveLoading" width="400px">
       <a-form :label-col="{ span: 6 }" :wrapper-col="{ span: 16 }">
+        <a-form-item label="角色编码" required>
+          <a-input v-model:value="addRoleCode" placeholder="如 ROLE_XXX" />
+        </a-form-item>
         <a-form-item label="角色名称" required>
           <a-input v-model:value="addRoleName" placeholder="请输入角色名称" />
+        </a-form-item>
+        <a-form-item label="数据权限">
+          <a-select v-model:value="addDataScope" style="width: 100%">
+            <a-select-option v-for="opt in dataScopeOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</a-select-option>
+          </a-select>
         </a-form-item>
         <a-form-item label="角色描述">
           <a-input v-model:value="addRoleDesc" placeholder="请输入角色描述" />
@@ -111,90 +131,72 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
-import { PlusOutlined } from '@ant-design/icons-vue'
-import type { RoleItem } from '@/types/system'
-import { roleApi } from '@/api/system'
+import { PlusOutlined, DeleteOutlined } from '@ant-design/icons-vue'
+import type { RoleItem, SysPermissionNode } from '@/types/system'
+import { roleApi, permApi } from '@/api/system'
 
-// 角色列表
-const roleList = ref<RoleItem[]>([])
+// 角色列表（映射后端 Role 字段）
+interface RoleListItem {
+  id: string
+  roleCode: string
+  roleName: string
+  dataScope: string
+  status: string
+  remark: string
+}
+
+const roleList = ref<RoleListItem[]>([])
 const selectedRoleId = ref<string | null>(null)
+
+// 数据权限选项
+const dataScopeOptions = [
+  { value: 'ALL', label: '全部数据' },
+  { value: 'REGION', label: '区域数据' },
+  { value: 'STORE', label: '门店数据' },
+  { value: 'SELF', label: '仅本人数据' },
+  { value: 'CUSTOM', label: '自定义数据' },
+  { value: 'NONE', label: '无数据权限' },
+]
+
+// 系统预置角色（不可删除），按 roleCode 前缀匹配
+const BUILTIN_ROLE_PREFIXES = ['ROLE_ADMIN', 'ROLE_HQ', 'ROLE_REGIONAL', 'ROLE_MANAGER', 'ROLE_ASSOCIATE']
+const isBuiltinRole = (role: RoleListItem) => BUILTIN_ROLE_PREFIXES.some(prefix => role.roleCode.startsWith(prefix))
 
 // 编辑表单
 const editName = ref('')
 const editDesc = ref('')
+const editDataScope = ref('ALL')
 const saveLoading = ref(false)
 
 // 权限标签页
 const activeTab = ref('menu')
 
-// 权限树数据（简化版，不使用 enabled 属性）
+// 权限树数据（后端 /permissions/tree）
 interface SimpleTreeNode {
   title: string
   key: string
   children?: SimpleTreeNode[]
 }
 
-const menuTreeData = ref<SimpleTreeNode[]>([
-  { title: '商品管理', key: 'product', children: [
-    { title: '商品列表', key: 'product-list' },
-    { title: '商品分类', key: 'product-category' },
-    { title: '商品品牌', key: 'product-brand' },
-    { title: '商品规格', key: 'product-spec' },
-  ]},
-  { title: '订单管理', key: 'order', children: [
-    { title: '订单列表', key: 'order-list' },
-    { title: '订单详情', key: 'order-detail' },
-  ]},
-  { title: '库存管理', key: 'stock', children: [
-    { title: '库存列表', key: 'stock-list' },
-    { title: '库存预警', key: 'stock-warning' },
-  ]},
-  { title: '营销管理', key: 'marketing', children: [
-    { title: '营销活动', key: 'marketing-activity' },
-    { title: '促销管理', key: 'marketing-promotion' },
-  ]},
-  { title: '人力资源', key: 'hr', children: [
-    { title: '员工管理', key: 'hr-employee' },
-    { title: '绩效考核', key: 'hr-performance' },
-  ]},
-])
+const permTreeData = ref<SysPermissionNode[]>([])
 
-const dataTreeData = ref<SimpleTreeNode[]>([
-  { title: '全部数据', key: 'data-all', children: [
-    { title: '本部门数据', key: 'data-dept' },
-    { title: '本部门及下级', key: 'data-dept-child' },
-    { title: '仅本人数据', key: 'data-self' },
-  ]},
-  { title: '商品数据', key: 'data-product', children: [
-    { title: '查看商品价格', key: 'data-product-price' },
-    { title: '查看成本价', key: 'data-product-cost' },
-  ]},
-  { title: '订单数据', key: 'data-order', children: [
-    { title: '查看订单金额', key: 'data-order-amount' },
-    { title: '导出订单数据', key: 'data-order-export' },
-  ]},
-])
+// 按 permType 过滤权限树：菜单/按钮/API
+const toSimpleTree = (nodes: SysPermissionNode[], permType: string): SimpleTreeNode[] => {
+  const result: SimpleTreeNode[] = []
+  for (const node of nodes) {
+    const children = node.children ? toSimpleTree(node.children, permType) : []
+    if (node.permType === permType || children.length > 0) {
+      result.push({ title: node.permName, key: String(node.id), children })
+    }
+  }
+  return result
+}
 
-const actionTreeData = ref<SimpleTreeNode[]>([
-  { title: '商品操作', key: 'action-product', children: [
-    { title: '新增商品', key: 'action-product-add' },
-    { title: '编辑商品', key: 'action-product-edit' },
-    { title: '删除商品', key: 'action-product-delete' },
-    { title: '上架/下架', key: 'action-product-status' },
-  ]},
-  { title: '订单操作', key: 'action-order', children: [
-    { title: '确认订单', key: 'action-order-confirm' },
-    { title: '取消订单', key: 'action-order-cancel' },
-    { title: '退款处理', key: 'action-order-refund' },
-  ]},
-  { title: '系统操作', key: 'action-system', children: [
-    { title: '用户管理', key: 'action-system-user' },
-    { title: '角色管理', key: 'action-system-role' },
-    { title: '系统配置', key: 'action-system-config' },
-  ]},
-])
+const menuTreeData = computed<SimpleTreeNode[]>(() => toSimpleTree(permTreeData.value, 'MENU'))
+const dataTreeData = computed<SimpleTreeNode[]>(() => toSimpleTree(permTreeData.value, 'BUTTON'))
+const actionTreeData = computed<SimpleTreeNode[]>(() => toSimpleTree(permTreeData.value, 'API'))
 
 // 选中状态
 const menuCheckedKeys = ref<string[]>([])
@@ -232,43 +234,89 @@ const handleActionCheckAll = (e: any) => {
 const addModalVisible = ref(false)
 const addRoleName = ref('')
 const addRoleDesc = ref('')
-const handleAddRole = () => { addRoleName.value = ''; addRoleDesc.value = ''; addModalVisible.value = true }
-const handleAddRoleOk = () => {
+const addRoleCode = ref('')
+const addDataScope = ref('ALL')
+const handleAddRole = () => {
+  addRoleCode.value = ''
+  addRoleName.value = ''
+  addRoleDesc.value = ''
+  addDataScope.value = 'ALL'
+  addModalVisible.value = true
+}
+const handleAddRoleOk = async () => {
+  if (!addRoleCode.value.trim()) { message.warning('请输入角色编码'); return }
   if (!addRoleName.value.trim()) { message.warning('请输入角色名称'); return }
-  roleList.value.push({ id: String(Date.now()), name: addRoleName.value, description: addRoleDesc.value, permissions: [] })
-  message.success('新增成功')
-  addModalVisible.value = false
+  // 规范化为大写，未带前缀时自动补 ROLE_
+  let roleCode = addRoleCode.value.trim().toUpperCase()
+  if (!roleCode.startsWith('ROLE_')) roleCode = `ROLE_${roleCode}`
+  if (!/^ROLE_[A-Z0-9_]+$/.test(roleCode)) { message.warning('角色编码仅支持大写字母、数字、下划线'); return }
+  saveLoading.value = true
+  try {
+    await roleApi.create({
+      roleCode,
+      roleName: addRoleName.value.trim(),
+      dataScope: addDataScope.value,
+      remark: addRoleDesc.value.trim() || undefined,
+    })
+    message.success('新增成功')
+    addModalVisible.value = false
+    await loadRoles()
+  } catch {
+    message.error('新增失败')
+  } finally {
+    saveLoading.value = false
+  }
+}
+
+// 加载已分配权限
+const loadRolePermissions = async (roleId: string) => {
+  const perms = await roleApi.getPermissions(roleId)
+  const keys = perms.map(p => String(p.id))
+  const keysOf = (tree: SimpleTreeNode[]) => getAllKeys(tree)
+  menuCheckedKeys.value = keys.filter(k => keysOf(menuTreeData.value).includes(k))
+  dataCheckedKeys.value = keys.filter(k => keysOf(dataTreeData.value).includes(k))
+  actionCheckedKeys.value = keys.filter(k => keysOf(actionTreeData.value).includes(k))
+  menuCheckAll.value = menuTreeData.value.length > 0 && menuCheckedKeys.value.length === keysOf(menuTreeData.value).length
+  dataCheckAll.value = dataTreeData.value.length > 0 && dataCheckedKeys.value.length === keysOf(dataTreeData.value).length
+  actionCheckAll.value = actionTreeData.value.length > 0 && actionCheckedKeys.value.length === keysOf(actionTreeData.value).length
 }
 
 // 选择角色
-const handleSelectRole = (role: RoleItem) => {
+const handleSelectRole = async (role: RoleListItem) => {
   selectedRoleId.value = role.id
-  editName.value = role.name
-  editDesc.value = role.description || ''
-  // 根据角色设置权限
-  const isAdmin = role.name === '超级管理员'
-  if (isAdmin) {
-    menuCheckedKeys.value = getAllKeys(menuTreeData.value)
-    dataCheckedKeys.value = getAllKeys(dataTreeData.value)
-    actionCheckedKeys.value = getAllKeys(actionTreeData.value)
-  } else {
-    menuCheckedKeys.value = ['product', 'product-list', 'order', 'order-list']
-    dataCheckedKeys.value = ['data-all', 'data-dept']
-    actionCheckedKeys.value = ['action-product', 'action-product-add']
+  editName.value = role.roleName
+  editDesc.value = role.remark || ''
+  editDataScope.value = role.dataScope || 'ALL'
+  try {
+    await loadRolePermissions(role.id)
+  } catch (error) {
+    console.error('加载角色权限失败', error)
   }
-  menuCheckAll.value = menuCheckedKeys.value.length === getAllKeys(menuTreeData.value).length
-  dataCheckAll.value = dataCheckedKeys.value.length === getAllKeys(dataTreeData.value).length
-  actionCheckAll.value = actionCheckedKeys.value.length === getAllKeys(actionTreeData.value).length
+}
+
+// 删除角色
+const handleDeleteRole = async (role: RoleListItem) => {
+  if (isBuiltinRole(role)) { message.warning('内置角色不可删除'); return }
+  try {
+    await roleApi.delete(role.id)
+    message.success('删除成功')
+    if (selectedRoleId.value === role.id) {
+      selectedRoleId.value = null
+      editName.value = ''
+      editDesc.value = ''
+    }
+    await loadRoles()
+  } catch {
+    message.error('删除失败')
+  }
 }
 
 // 重置
-const handleReset = () => {
+const handleReset = async () => {
   if (selectedRoleId.value) {
     const role = roleList.value.find(r => r.id === selectedRoleId.value)
     if (role) {
-      editName.value = role.name
-      editDesc.value = role.description || ''
-      handleSelectRole(role)
+      await handleSelectRole(role)
       message.info('已重置')
     }
   }
@@ -280,21 +328,46 @@ const handleSave = async () => {
   if (!editName.value.trim()) { message.warning('请输入角色名称'); return }
   saveLoading.value = true
   try {
-    await new Promise(resolve => setTimeout(resolve, 500))
-    const index = roleList.value.findIndex(r => r.id === selectedRoleId.value)
-    if (index !== -1) {
-      roleList.value[index].name = editName.value
-      roleList.value[index].description = editDesc.value
-    }
+    const role = roleList.value.find(r => r.id === selectedRoleId.value)
+    await roleApi.update(selectedRoleId.value, {
+      roleName: editName.value.trim(),
+      dataScope: editDataScope.value,
+      status: role?.status,
+      remark: editDesc.value.trim() || undefined,
+    })
+    // 保存权限分配
+    const allKeys = Array.from(new Set([
+      ...menuCheckedKeys.value,
+      ...dataCheckedKeys.value,
+      ...actionCheckedKeys.value,
+    ]))
+    await roleApi.assignPermissions(selectedRoleId.value, allKeys)
     message.success('保存成功')
-  } catch { message.error('保存失败') }
+    await loadRoles()
+  } catch (error) { console.error('保存失败', error) }
   finally { saveLoading.value = false }
 }
 
-onMounted(async () => {
+// 加载角色列表
+const loadRoles = async () => {
   try {
-    roleList.value = await roleApi.getList()
-  } catch { message.error('加载角色列表失败') }
+    const res = await roleApi.getList()
+    roleList.value = (res.list || []).map((r: RoleItem) => ({
+      id: String(r.id),
+      roleCode: r.roleCode || '',
+      roleName: r.roleName,
+      dataScope: r.dataScope || 'ALL',
+      status: r.status || 'ENABLED',
+      remark: r.remark || '',
+    }))
+  } catch (error) { console.error('加载角色列表失败', error) }
+}
+
+onMounted(async () => {
+  await loadRoles()
+  try {
+    permTreeData.value = await permApi.getTree()
+  } catch (error) { console.error('加载权限树失败', error) }
 })
 </script>
 
@@ -312,6 +385,10 @@ onMounted(async () => {
 .role-item.active { background: #fff7e6; border-left: 3px solid #c8a44d; }
 .role-name { font-size: 14px; font-weight: 500; color: #333; margin-bottom: 4px; }
 .role-desc { font-size: 12px; color: #999; }
+.role-delete { float: right; color: #999; font-size: 13px; cursor: pointer; margin-top: -2px; }
+.role-delete:hover { color: #ff4d4f; }
+.role-delete-disabled { color: #d9d9d9; cursor: not-allowed; }
+.role-delete-disabled:hover { color: #d9d9d9; }
 .role-main { flex: 1; background: #fff; border-radius: 12px; padding: 24px; overflow-y: auto; }
 .role-info-card { margin-bottom: 20px; padding-bottom: 16px; border-bottom: 1px solid #f0f0f0; }
 .role-info-header { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }

@@ -142,8 +142,8 @@
         </a-form-item>
         <a-form-item label="仓库" name="warehouse">
           <a-select v-model:value="formData.warehouse" placeholder="请选择仓库">
-            <a-select-option v-for="wh in warehouses" :key="wh.id" :value="wh.name">
-              {{ wh.name }}
+            <a-select-option v-for="s in warehouses" :key="s.id" :value="s.name">
+              {{ s.name }}
             </a-select-option>
           </a-select>
         </a-form-item>
@@ -180,15 +180,13 @@ import { ref, reactive, onMounted, watch } from 'vue'
 import { message, Modal } from 'ant-design-vue'
 import { PlusOutlined, SearchOutlined, DownOutlined } from '@ant-design/icons-vue'
 import dayjs from 'dayjs'
-import type { InventoryCheckRecord, InventoryCheckParams, CheckStatus } from '@/types/goods'
-import { inventoryCheckApi } from '@/api/goods'
+import { useCrudTable } from '@/composables/useCrudTable'
+import { useDetailModal } from '@/composables/useDetailModal'
+import type { InventoryCheckRecord, CheckStatus, StoreItem } from '@/types/goods'
+import { inventoryCheckApi, storeApi } from '@/api/goods'
 
-// 仓库数据
-const warehouses = [
-  { id: '1', name: '深圳总仓' },
-  { id: '2', name: '北京分仓' },
-  { id: '3', name: '上海分仓' },
-]
+// 仓库数据 — 从门店列表加载
+const warehouses = ref<StoreItem[]>([])
 
 // 当前标签页
 const activeTab = ref<string>('planning')
@@ -201,17 +199,25 @@ const searchForm = reactive({
   dateRange: null as any
 })
 
-// 表格数据
-const tableData = ref<InventoryCheckRecord[]>([])
-const loading = ref(false)
-const pagination = reactive({
-  current: 1,
-  size: 10,
-  total: 0,
-  showSizeChanger: true,
-  showQuickJumper: true,
-  showTotal: (total: number) => `共 ${total} 条`
+// CRUD 表格逻辑
+const { tableData, loading, pagination, loadData, handleSearch, handleTableChange } = useCrudTable({
+  searchForm,
+  loadFn: (params) => {
+    const { checkCode, warehouse, status, dateRange, page, pageSize } = params as any
+    return inventoryCheckApi.getList({
+      checkCode: checkCode || undefined,
+      warehouse,
+      status,
+      startDate: dateRange?.[0]?.format?.('YYYY-MM-DD') || undefined,
+      endDate: dateRange?.[1]?.format?.('YYYY-MM-DD') || undefined,
+      page,
+      pageSize,
+    })
+  },
 })
+
+// 详情弹窗
+const { detailVisible, detailRecord, openDetail } = useDetailModal<InventoryCheckRecord>()
 
 // 表格列配置
 const columns = [
@@ -225,10 +231,6 @@ const columns = [
   { title: '状态', dataIndex: 'status', key: 'status', width: 80, align: 'center' as const },
   { title: '操作', key: 'action', width: 150, fixed: 'right' as const }
 ]
-
-// 详情弹窗
-const detailVisible = ref(false)
-const detailRecord = ref<any>(null)
 
 // 弹窗相关
 const modalVisible = ref(false)
@@ -279,38 +281,10 @@ const getStatusText = (status: string) => {
   return map[status] || status
 }
 
-// 加载数据
-const loadData = async () => {
-  loading.value = true
-  try {
-    const params: InventoryCheckParams = {
-      checkCode: searchForm.checkCode || undefined,
-      warehouse: searchForm.warehouse,
-      status: searchForm.status,
-      startDate: searchForm.dateRange?.[0]?.format?.('YYYY-MM-DD') || undefined,
-      endDate: searchForm.dateRange?.[1]?.format?.('YYYY-MM-DD') || undefined,
-      page: pagination.current,
-      pageSize: pagination.pageSize
-    }
-    const res = await inventoryCheckApi.getList(params)
-    tableData.value = res.list
-    pagination.total = res.total
-  } catch (error) {
-    message.error('加载数据失败')
-  } finally {
-    loading.value = false
-  }
-}
-
 // 标签页切换
 const handleTabChange = (key: string) => {
   activeTab.value = key
-}
-
-// 搜索
-const handleSearch = () => {
-  pagination.current = 1
-  loadData()
+  searchForm.status = key as CheckStatus
 }
 
 // 重置
@@ -321,13 +295,6 @@ const handleReset = () => {
   searchForm.dateRange = null
   activeTab.value = 'planning'
   handleSearch()
-}
-
-// 表格分页
-const handleTableChange = (pag: any) => {
-  pagination.current = pag.current
-  pagination.pageSize = pag.pageSize
-  loadData()
 }
 
 // 新增
@@ -351,8 +318,7 @@ const handleEdit = (record: InventoryCheckRecord) => {
 
 // 详情
 const handleDetail = (record: InventoryCheckRecord) => {
-  detailRecord.value = record
-  detailVisible.value = true
+  openDetail(record)
 }
 
 // 开始盘点
@@ -449,7 +415,8 @@ const resetForm = () => {
   formData.remark = ''
 }
 
-onMounted(() => {
+onMounted(async () => {
+  try { warehouses.value = await storeApi.getAll() } catch {}
   loadData()
 })
 </script>

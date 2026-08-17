@@ -16,14 +16,6 @@
             style="width: 180px"
           />
         </a-form-item>
-        <a-form-item label="客户姓名">
-          <a-input
-            v-model:value="searchForm.customerName"
-            placeholder="请输入客户姓名"
-            allow-clear
-            style="width: 150px"
-          />
-        </a-form-item>
         <a-form-item label="订单状态">
           <a-select
             v-model:value="searchForm.status"
@@ -115,17 +107,21 @@
               </div>
               <div class="order-actions">
                 <a @click="handleDetail(order)" class="action-link">查看详情</a>
-                <template v-if="order.orderStatus === 'pending'">
+                <template v-if="String(order.orderStatus || '').toLowerCase() === 'pending'">
                   <a-divider type="vertical" />
                   <a class="action-link" @click="handleCancel(order)">取消订单</a>
                 </template>
-                <template v-if="order.orderStatus === 'shipped'">
+                <template v-if="String(order.orderStatus || '').toLowerCase() === 'paid'">
+                  <a-divider type="vertical" />
+                  <a class="action-link" @click="handleOpenShip(order)">发货</a>
+                </template>
+                <template v-if="String(order.orderStatus || '').toLowerCase() === 'shipped'">
                   <a-divider type="vertical" />
                   <a class="action-link" @click="handleConfirm(order)">确认收货</a>
                 </template>
-                <template v-if="order.orderStatus === 'completed'">
+                <template v-if="String(order.orderStatus || '').toLowerCase() === 'refund'">
                   <a-divider type="vertical" />
-                  <a class="action-link" @click="handleRepurchase(order)">再次购买</a>
+                  <a class="action-link" style="color: #ff4d4f" @click="handleGoReturn">处理退款</a>
                 </template>
               </div>
             </div>
@@ -146,6 +142,39 @@
         </div>
       </a-spin>
     </div>
+
+    <!-- 发货弹窗 -->
+    <a-modal
+      v-model:open="shipModal.visible"
+      title="订单发货"
+      :confirm-loading="shipModal.loading"
+      @ok="handleShipConfirm"
+    >
+      <a-form :model="shipForm" layout="vertical">
+        <a-form-item label="物流公司" required>
+          <a-select
+            v-model:value="shipForm.deliveryCompany"
+            placeholder="请选择物流公司"
+            allow-clear
+          >
+            <a-select-option value="顺丰速运">顺丰速运</a-select-option>
+            <a-select-option value="中通快递">中通快递</a-select-option>
+            <a-select-option value="圆通速递">圆通速递</a-select-option>
+            <a-select-option value="韵达快递">韵达快递</a-select-option>
+            <a-select-option value="申通快递">申通快递</a-select-option>
+            <a-select-option value="京东物流">京东物流</a-select-option>
+            <a-select-option value="EMS">EMS</a-select-option>
+            <a-select-option value="其他">其他</a-select-option>
+          </a-select>
+        </a-form-item>
+        <a-form-item label="运单号" required>
+          <a-input
+            v-model:value="shipForm.deliveryTrackNo"
+            placeholder="请输入快递运单号"
+          />
+        </a-form-item>
+      </a-form>
+    </a-modal>
   </div>
 </template>
 
@@ -154,7 +183,8 @@ import { ref, reactive, watch, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import { SearchOutlined } from '@ant-design/icons-vue'
-import type { OrderRecord, OrderQueryParams, OrderStatus } from '@/types/order'
+import { useCrudTable } from '@/composables/useCrudTable'
+import type { OrderRecord, OrderStatus } from '@/types/order'
 import { orderApi, orderStatusMap } from '@/api/order'
 
 const router = useRouter()
@@ -165,21 +195,24 @@ const activeTab = ref<string>('all')
 // 搜索表单
 const searchForm = reactive({
   keyword: '',
-  customerName: '',
   status: undefined as OrderStatus | undefined,
   dateRange: null as any
 })
 
-// 表格数据
-const tableData = ref<OrderRecord[]>([])
-const loading = ref(false)
-const pagination = reactive({
-  current: 1,
-  pageSize: 10,
-  total: 0,
-  showSizeChanger: true,
-  showQuickJumper: true,
-  showTotal: (total: number) => `共 ${total} 条`
+// 表格数据（使用 useCrudTable composable）
+const { tableData, loading, pagination, loadData, handleSearch } = useCrudTable<OrderRecord, typeof searchForm>({
+  searchForm,
+  loadFn: (params) => {
+    const statusFilter = activeTab.value === 'all' ? (params as any).status : activeTab.value as OrderStatus
+    return orderApi.getList({
+      keyword: (params as any).keyword || undefined,
+      status: statusFilter,
+      startDate: searchForm.dateRange?.[0]?.format?.('YYYY-MM-DD') || undefined,
+      endDate: searchForm.dateRange?.[1]?.format?.('YYYY-MM-DD') || undefined,
+      page: params.page || 1,
+      pageSize: params.pageSize || 10,
+    })
+  },
 })
 
 // 监听标签页切换
@@ -188,56 +221,28 @@ watch(activeTab, () => {
   loadData()
 })
 
-// 状态颜色
-const getOrderStatusColor = (status: OrderStatus) => {
-  return orderStatusMap[status]?.color || 'default'
+// 状态颜色（后端存在 PENDING/cancelled 等大小写混用，统一转小写匹配）
+const getOrderStatusColor = (status: OrderStatus | string) => {
+  const key = String(status || '').toLowerCase() as OrderStatus
+  return orderStatusMap[key]?.color || 'default'
 }
 
 // 状态文本
-const getOrderStatusText = (status: OrderStatus) => {
-  return orderStatusMap[status]?.text || status
+const getOrderStatusText = (status: OrderStatus | string) => {
+  const key = String(status || '').toLowerCase() as OrderStatus
+  return orderStatusMap[key]?.text || status
 }
 
-// 加载数据
-const loadData = async () => {
-  loading.value = true
-  try {
-    const statusFilter = activeTab.value === 'all' ? searchForm.status : activeTab.value as OrderStatus
-    const params: OrderQueryParams = {
-      keyword: searchForm.keyword || undefined,
-      status: statusFilter,
-      startDate: searchForm.dateRange?.[0]?.format?.('YYYY-MM-DD') || undefined,
-      endDate: searchForm.dateRange?.[1]?.format?.('YYYY-MM-DD') || undefined,
-      page: pagination.current,
-      pageSize: pagination.pageSize
-    }
-    const res = await orderApi.getList(params)
-    tableData.value = res.list
-    pagination.total = res.total
-  } catch (error) {
-    message.error('加载数据失败')
-  } finally {
-    loading.value = false
-  }
-}
-
-// 搜索
-const handleSearch = () => {
-  pagination.current = 1
-  loadData()
-}
-
-// 重置
+// 重置（覆盖 composable 版本以同步 activeTab）
 const handleReset = () => {
   searchForm.keyword = ''
-  searchForm.customerName = ''
   searchForm.status = undefined
   searchForm.dateRange = null
   activeTab.value = 'all'
   handleSearch()
 }
 
-// 分页
+// 分页（覆盖 composable 版本以适配独立 a-pagination 的 (page, pageSize) 签名）
 const handleTableChange = (page: number, pageSize: number) => {
   pagination.current = page
   pagination.pageSize = pageSize
@@ -255,6 +260,11 @@ const handleDetail = (order: OrderRecord) => {
   router.push(`/order/detail/${order.id}`)
 }
 
+// 跳转退款处理页
+const handleGoReturn = () => {
+  router.push('/order/return')
+}
+
 // 取消订单
 const handleCancel = async (order: OrderRecord) => {
   try {
@@ -262,7 +272,7 @@ const handleCancel = async (order: OrderRecord) => {
     message.success('订单已取消')
     loadData()
   } catch (error) {
-    message.error('操作失败')
+    console.error('操作失败', error)
   }
 }
 
@@ -273,13 +283,51 @@ const handleConfirm = async (order: OrderRecord) => {
     message.success('已确认收货')
     loadData()
   } catch (error) {
-    message.error('操作失败')
+    console.error('操作失败', error)
   }
 }
 
-// 再次购买
-const handleRepurchase = (order: OrderRecord) => {
-  router.push('/goods/list')
+// 发货
+const shipModal = reactive({
+  visible: false,
+  loading: false,
+})
+
+const shipForm = reactive({
+  deliveryCompany: '',
+  deliveryTrackNo: '',
+})
+
+let currentShipOrder: OrderRecord | null = null
+
+const handleOpenShip = (order: OrderRecord) => {
+  currentShipOrder = order
+  shipForm.deliveryCompany = ''
+  shipForm.deliveryTrackNo = ''
+  shipModal.visible = true
+}
+
+const handleShipConfirm = async () => {
+  if (!shipForm.deliveryCompany || !shipForm.deliveryTrackNo) {
+    message.warning('请填写物流公司和运单号')
+    return
+  }
+  if (!currentShipOrder) return
+  shipModal.loading = true
+  try {
+    await orderApi.ship(currentShipOrder.id, {
+      deliveryCompany: shipForm.deliveryCompany,
+      deliveryTrackNo: shipForm.deliveryTrackNo,
+    })
+    message.success('发货成功')
+    shipModal.visible = false
+    loadData()
+  } catch (error) {
+    console.error('发货失败', error)
+    message.error('发货失败')
+  } finally {
+    shipModal.loading = false
+  }
 }
 
 onMounted(() => {
@@ -317,19 +365,24 @@ onMounted(() => {
 
 .search-card {
   padding: 16px 24px;
+  overflow-x: auto;
 }
 
 .search-card :deep(.ant-form) {
+  display: flex;
   flex-wrap: wrap;
+  gap: 0 16px;
 }
 
 .search-card :deep(.ant-form-item) {
   margin-bottom: 12px;
   margin-right: 0;
+  flex-shrink: 0;
 }
 
 .tab-card {
   padding: 0 24px;
+  overflow-x: auto;
 }
 
 .tab-card :deep(.ant-tabs) {
@@ -338,6 +391,7 @@ onMounted(() => {
 
 .tab-card :deep(.ant-tabs-nav) {
   margin-bottom: 0;
+  white-space: nowrap;
 }
 
 /* 订单列表卡片 */
@@ -498,10 +552,17 @@ onMounted(() => {
 
   .search-card {
     padding: 12px 16px;
+    overflow-x: auto;
+  }
+
+  .search-card :deep(.ant-form) {
+    flex-direction: column;
+    gap: 0;
   }
 
   .search-card :deep(.ant-form-item) {
     width: 100%;
+    margin-bottom: 8px;
   }
 
   .search-card :deep(.ant-form-item-control) {
@@ -510,6 +571,7 @@ onMounted(() => {
 
   .tab-card {
     padding: 0 16px;
+    overflow-x: auto;
   }
 
   .product-info {

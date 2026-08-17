@@ -135,7 +135,7 @@ const handleLogin = async () => {
     await formRef.value?.validateFields()
     loginLoading.value = true
 
-    const data = await authStore.login(formData.username, formData.password)
+    await authStore.login(formData.username, formData.password)
 
     message.success('登录成功！')
     router.push('/dashboard')

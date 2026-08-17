@@ -10,8 +10,10 @@ import './styles/index.less'
 
 const app = createApp(App)
 
-app.use(createPinia())
+const pinia = createPinia()
+app.use(pinia)
 app.use(router)
 app.use(Antd)
 
+// 登录态由路由守卫懒初始化（避免阻塞 app 挂载）
 app.mount('#app')

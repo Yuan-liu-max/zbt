@@ -14,18 +14,18 @@
           </a-tabs>
         </div>
         <div class="message-list">
-          <div v-for="msg in filteredMessages" :key="msg.id" class="message-item" :class="{ active: selectedId === msg.id, unread: !msg.isRead }" @click="handleSelect(msg)">
-            <div class="msg-icon" :style="{ background: getTypeColor(msg.type) + '15', color: getTypeColor(msg.type) }">
-              <component :is="getTypeIcon(msg.type)" />
+          <div v-for="msg in filteredMessages" :key="msg.id" class="message-item" :class="{ active: selectedId === msg.id, unread: msg.isRead !== 1 }" @click="handleSelect(msg)">
+            <div class="msg-icon" :style="{ background: getTypeColor() + '15', color: getTypeColor() }">
+              <component :is="getTypeIcon()" />
             </div>
             <div class="msg-info">
               <div class="msg-title-row">
                 <span class="msg-title">{{ msg.title }}</span>
-                <span class="msg-time">{{ msg.time }}</span>
+                <span class="msg-time">{{ msg.createdAt }}</span>
               </div>
-              <div class="msg-summary">{{ msg.summary }}</div>
+              <div class="msg-summary">{{ msg.content }}</div>
             </div>
-            <div v-if="!msg.isRead" class="unread-badge"></div>
+            <div v-if="msg.isRead !== 1" class="unread-badge"></div>
           </div>
         </div>
       </div>
@@ -35,20 +35,9 @@
         <template v-if="selectedMessage">
           <div class="detail-header">
             <h3>{{ selectedMessage.title }}</h3>
-            <span class="detail-time">{{ selectedMessage.time }}</span>
+            <span class="detail-time">{{ getTypeText() }} · {{ selectedMessage.createdAt }}</span>
           </div>
           <div class="detail-content" v-html="formatContent(selectedMessage.content)"></div>
-          <div v-if="selectedMessage.extra" class="detail-extra">
-            <div class="extra-item">
-              <span class="extra-label">到期时间：</span>
-              <span class="extra-value">2024-11-09</span>
-            </div>
-            <div class="extra-item">
-              <span class="extra-label">当前金额：</span>
-              <span class="extra-value highlight">{{ selectedMessage.extra }}</span>
-            </div>
-            <a-button type="primary" class="action-btn">立即续费</a-button>
-          </div>
         </template>
         <div v-else class="empty-detail">
           <a-empty description="选择一条消息查看详情" />
@@ -61,25 +50,18 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
-import {
-  UserOutlined, GlobalOutlined, CustomerServiceOutlined, RobotOutlined, SettingOutlined
-} from '@ant-design/icons-vue'
+import { MailOutlined } from '@ant-design/icons-vue'
 import type { MessageItem } from '@/types/profile'
-import { notificationApi } from '@/api/notification'
-
-const messageTypeMap: Record<string, string> = {
-  TASK_START: '任务开始', TASK_DEADLINE: '任务截止', TASK_OVERDUE: '任务超时',
-  TASK_AUDIT: '任务审核', TASK_REJECTED: '已驳回', SYSTEM: '系统通知'
-}
+import { messageApi } from '@/api/message'
 
 const activeTab = ref('all')
 const allMessages = ref<MessageItem[]>([])
-const selectedId = ref<string | null>(null)
+const selectedId = ref<string | number | null>(null)
 
-const unreadCount = computed(() => allMessages.value.filter(m => !m.isRead).length)
+const unreadCount = computed(() => allMessages.value.filter(m => m.isRead !== 1).length)
 
 const filteredMessages = computed(() => {
-  if (activeTab.value === 'unread') return allMessages.value.filter(m => !m.isRead)
+  if (activeTab.value === 'unread') return allMessages.value.filter(m => m.isRead !== 1)
   return allMessages.value
 })
 
@@ -88,24 +70,31 @@ const selectedMessage = computed(() => {
   return allMessages.value.find(m => m.id === selectedId.value) || null
 })
 
-const iconMap: Record<string, any> = {
-  UserOutlined, GlobalOutlined, CustomerServiceOutlined, RobotOutlined, SettingOutlined
+// 私信统一图标/颜色/文案
+const getTypeIcon = (_type?: string) => MailOutlined
+const getTypeColor = (_type?: string) => '#1890ff'
+const getTypeText = (_type?: string) => '私信'
+
+// XSS 防护：先转义 HTML，再保留换行
+const formatContent = (content: string) => {
+  const escaped = content.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+  return escaped.replace(/\n/g, '<br>')
 }
-
-const getTypeIcon = () => UserOutlined
-const getTypeColor = () => '#1890ff'
-
-const formatContent = (content: string) => content.replace(/\n/g, '<br>')
 
 const loadData = async () => {
   try {
-    allMessages.value = await notificationApi.getList()
+    const res = await messageApi.getList({ page: 1, pageSize: 100 })
+    allMessages.value = res.list || []
   } catch { message.error('加载失败') }
 }
 
-const handleSelect = (msg: MessageItem) => {
+const handleSelect = async (msg: MessageItem) => {
   selectedId.value = msg.id
-  msg.isRead = true
+  if (msg.isRead === 1) return
+  msg.isRead = 1
+  try {
+    await messageApi.markAsRead(msg.id)
+  } catch { message.error('标记已读失败') }
 }
 
 onMounted(() => { loadData() })

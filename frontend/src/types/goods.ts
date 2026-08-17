@@ -1,7 +1,7 @@
 // 商品管理相关类型定义
 
 // 商品状态
-export type GoodsStatus = 'ON_SALE' | 'SOLD' | 'TRANSFER' | 'REPAIR' | 'OFF_SHELF'
+export type GoodsStatus = 'ON_SALE' | 'SOLD' | 'TRANSFER' | 'REPAIR' | 'OFF_SHELF' | 'on' | 'off'
 
 // 商品分类层级
 export type CategoryLevel = 1 | 2 | 3
@@ -11,11 +11,12 @@ export interface GoodsItem {
   id: string
   code: string           // 商品编号
   name: string           // 商品名称
-  categoryId: string     // 分类ID
+  categoryId?: string    // 分类ID
   categoryName: string   // 分类名称
-  brandId: string        // 品牌ID
-  brandName: string      // 品牌名称
-  retailPrice: number    // 零售价
+  brandId?: string       // 品牌ID
+  brandName?: string     // 品牌名称
+  price: number          // 零售价
+  retailPrice?: number   // 零售价（兼容旧字段）
   costPrice: number      // 成本价（敏感字段）
   grossMarginRate: number // 毛利率（敏感字段）
   stock: number          // 库存数量
@@ -63,6 +64,17 @@ export interface BrandItem {
 export interface StoreItem {
   id: string
   name: string
+  storeId?: string
+  storeName?: string
+  storeCode?: string
+  regionId?: string
+  address?: string
+  storeManagerId?: string
+  openingDate?: string
+  storeType?: string
+  status?: string
+  businessHours?: string
+  contactPhone?: string
 }
 
 // 商品查询参数
@@ -73,6 +85,16 @@ export interface GoodsQueryParams {
   storeId?: string       // 门店
   page: number
   pageSize: number
+}
+
+// 商品图片
+export interface ProductImage {
+  id: string
+  productId: string
+  imageUrl: string
+  sortOrder: number
+  isPrimary: number
+  createdAt: string
 }
 
 // 统一 API 响应包装

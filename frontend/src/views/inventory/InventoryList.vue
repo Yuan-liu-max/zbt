@@ -178,6 +178,42 @@
         </a-descriptions-item>
       </a-descriptions>
     </a-modal>
+
+    <!-- 库存调整弹窗 -->
+    <a-modal v-model:open="adjustVisible" title="库存调整" @ok="handleAdjustOk" width="480px">
+      <div class="adjust-record" v-if="adjustRecord">
+        <span>{{ adjustRecord.name }}</span>
+        <span class="adjust-code">{{ adjustRecord.code }}</span>
+      </div>
+      <a-form :label-col="{ span: 5 }" :wrapper-col="{ span: 17 }">
+        <a-form-item label="调整数量" required>
+          <a-input-number v-model:value="adjustForm.delta" placeholder="正数为增加，负数为减少" style="width: 100%" />
+        </a-form-item>
+        <a-form-item label="调整原因" required>
+          <a-textarea v-model:value="adjustForm.reason" :rows="3" placeholder="请输入调整原因" />
+        </a-form-item>
+      </a-form>
+    </a-modal>
+
+    <!-- 调拨弹窗 -->
+    <a-modal v-model:open="transferVisible" title="库存调拨" @ok="handleTransferOk" width="480px">
+      <div class="adjust-record" v-if="transferRecord">
+        <span>{{ transferRecord.name }}</span>
+        <span class="adjust-code">{{ transferRecord.code }}</span>
+      </div>
+      <a-form :label-col="{ span: 5 }" :wrapper-col="{ span: 17 }">
+        <a-form-item label="调入门店" required>
+          <a-select v-model:value="transferForm.toStoreId" placeholder="请选择调入门店">
+            <a-select-option v-for="store in stores" :key="store.id" :value="store.id">
+              {{ store.name }}
+            </a-select-option>
+          </a-select>
+        </a-form-item>
+        <a-form-item label="调拨数量" required>
+          <a-input-number v-model:value="transferForm.quantity" :min="1" style="width: 100%" />
+        </a-form-item>
+      </a-form>
+    </a-modal>
   </div>
 </template>
 
@@ -186,19 +222,17 @@ import { ref, reactive, onMounted } from 'vue'
 import request from '@/utils/request'
 import { message } from 'ant-design-vue'
 import { PlusOutlined, SearchOutlined, ExportOutlined, DownOutlined } from '@ant-design/icons-vue'
-import type { GoodsItem, GoodsQueryParams, GoodsStatus, GoodsCategory, BrandItem, StoreItem } from '@/types/goods'
-import { goodsApi, categoryApi, brandApi } from '@/api/goods'
+import { useCrudTable } from '@/composables/useCrudTable'
+import { useDetailModal } from '@/composables/useDetailModal'
+import type { GoodsItem, GoodsStatus, GoodsCategory, BrandItem, StoreItem } from '@/types/goods'
+import { goodsApi, categoryApi, brandApi, storeApi } from '@/api/goods'
 import { exportComingSoon } from '@/utils/export'
 
 // 库存状态（独立于商品上下架状态）
 type InventoryStatus = 'normal' | 'warning' | 'shortage'
 
 // 门店数据
-const stores = ref<StoreItem[]>([
-  { id: '1', name: '深圳总仓' },
-  { id: '2', name: '北京分仓' },
-  { id: '3', name: '上海分仓' },
-])
+const stores = ref<StoreItem[]>([])
 
 // 搜索表单
 const searchForm = reactive({
@@ -207,33 +241,27 @@ const searchForm = reactive({
   inventoryStatus: undefined as InventoryStatus | undefined,
 })
 
-// 表格数据
-const tableData = ref<GoodsItem[]>([])
-const loading = ref(false)
-const pagination = reactive({
-  current: 1,
-  pageSize: 10,
-  total: 0,
-  showSizeChanger: true,
-  showQuickJumper: true,
-  showTotal: (total: number) => `共 ${total} 条`
+// CRUD 表格逻辑
+const { tableData, loading, pagination, loadData, handleSearch, handleTableChange } = useCrudTable({
+  searchForm,
+  loadFn: (params) => goodsApi.getList(params),
 })
+
+// 详情弹窗
+const { detailVisible, detailRecord, openDetail } = useDetailModal<GoodsItem>()
 
 // 表格列配置
 const columns = [
   { title: '商品编码', dataIndex: 'code', key: 'code', width: 140 },
   { title: '商品名称', dataIndex: 'name', key: 'name', width: 140 },
-  { title: '商品分类', dataIndex: 'categoryName', key: 'categoryName', width: 110 },
+  { title: '商品分类', dataIndex: 'categoryName', key: 'categoryName', width: 100 },
+  { title: '品牌', dataIndex: 'brandName', key: 'brandName', width: 90 },
   { title: '所属门店', dataIndex: 'storeName', key: 'storeName', width: 120 },
   { title: '售价(元)', dataIndex: 'price', key: 'price', width: 100, align: 'right' as const },
   { title: '库存数量', dataIndex: 'stock', key: 'stock', width: 100, align: 'right' as const },
   { title: '库存状态', dataIndex: 'status', key: 'inventoryStatus', width: 90, align: 'center' as const },
   { title: '操作', key: 'action', width: 160, fixed: 'right' as const }
 ]
-
-// 详情弹窗
-const detailVisible = ref(false)
-const detailRecord = ref<any>(null)
 
 // 弹窗相关
 const modalVisible = ref(false)
@@ -306,44 +334,21 @@ const getStatusText = (stock: number, _brandId?: string) => {
   return map[status]
 }
 
-// 加载数据
-const loadData = async () => {
-  loading.value = true
-  try {
-    const params: GoodsQueryParams = {
-      keyword: searchForm.keyword || undefined,
-      page: pagination.current,
-      pageSize: pagination.pageSize
-    }
-    const res = await goodsApi.getList(params)
-    tableData.value = res.list
-    pagination.total = res.total
-  } catch (error) {
-    message.error('加载数据失败')
-  } finally {
-    loading.value = false
-  }
-}
-
-// 加载分类和品牌
+// 加载分类、品牌和门店
 const loadCategoriesAndBrands = async () => {
   try {
-    const [catTree, brandList] = await Promise.all([
+    const [catTree, brandList, storeList] = await Promise.all([
       categoryApi.getTree(),
-      brandApi.getAll()
+      brandApi.getAll(),
+      storeApi.getAll()
     ])
     categoryTree.value = catTree
     flatCategories.value = flattenCategories(catTree)
     brands.value = brandList
+    stores.value = storeList
   } catch (error) {
     console.error('加载数据失败', error)
   }
-}
-
-// 搜索
-const handleSearch = () => {
-  pagination.current = 1
-  loadData()
 }
 
 // 重置
@@ -359,18 +364,23 @@ const handleExport = () => {
   exportComingSoon('库存数据')
 }
 
-// 表格分页
-const handleTableChange = (pag: any) => {
-  pagination.current = pag.current
-  pagination.pageSize = pag.pageSize
-  loadData()
-}
-
 // 新增
 const handleAdd = () => {
   isEdit.value = false
   resetForm()
   modalVisible.value = true
+}
+
+// 根据分类名称在树中查找路径（解决后端返回 categoryName 而非 categoryId 的问题）
+const findCategoryPath = (items: GoodsCategory[], targetName: string): string[] => {
+  for (const item of items) {
+    if (item.name === targetName) return [item.id]
+    if (item.children) {
+      const path = findCategoryPath(item.children, targetName)
+      if (path.length) return [item.id, ...path]
+    }
+  }
+  return []
 }
 
 // 编辑
@@ -379,10 +389,13 @@ const handleEdit = (record: GoodsItem) => {
   formData.id = record.id
   formData.code = record.code
   formData.name = record.name
-  formData.categoryId = record.categoryId ? [record.categoryId] : []
+  // 用分类名称在树中查找路径（解决 categoryTree.id 是数字但 record.categoryId 是字符串的错配）
+  formData.categoryId = findCategoryPath(categoryTree.value, record.categoryName || '')
   formData.storeId = record.storeId
-  formData.brandId = record.brandId
-  formData.price = record.retailPrice
+  // 用品牌名称匹配品牌ID（解决后端返回 brandName 而非 brandId）
+  const matchedBrand = brands.value.find(b => b.name === record.brandName)
+  formData.brandId = matchedBrand?.id || record.brandId || ''
+  formData.price = record.price ?? record.retailPrice ?? 0
   formData.stock = record.stock
   formData.status = record.status
   modalVisible.value = true
@@ -390,8 +403,7 @@ const handleEdit = (record: GoodsItem) => {
 
 // 详情
 const handleDetail = (record: GoodsItem) => {
-  detailRecord.value = record
-  detailVisible.value = true
+  openDetail(record)
 }
 
 // 库存调整
@@ -415,7 +427,7 @@ const handleAdjustOk = async () => {
     message.success('调整成功')
     adjustVisible.value = false
     loadData()
-  } catch { message.error('调整失败') }
+  } catch (error) { console.error('调整失败', error) }
 }
 
 // 调拨
@@ -440,7 +452,7 @@ const handleTransferOk = async () => {
     message.success('调拨成功')
     transferVisible.value = false
     loadData()
-  } catch { message.error('调拨失败') }
+  } catch (error) { console.error('调拨失败', error) }
 }
 
 // 弹窗确认
@@ -449,8 +461,9 @@ const handleModalOk = async () => {
     await formRef.value?.validateFields()
     modalLoading.value = true
 
-    const lastCategoryId = formData.categoryId[formData.categoryId.length - 1] || ''
-    const categoryName = flatCategories.value.find(c => c.id === lastCategoryId)?.name || ''
+    const lastCategoryId = formData.categoryId.length ? formData.categoryId[formData.categoryId.length - 1] : ''
+    // 从打平的分类中查找名称（id 可能是数字或字符串，都要兼容）
+    const categoryName = flatCategories.value.find(c => String(c.id) === String(lastCategoryId))?.name || ''
     const storeName = stores.value.find(s => s.id === formData.storeId)?.name || ''
     const brandName = brands.value.find(b => b.id === formData.brandId)?.name || ''
 
@@ -495,7 +508,7 @@ const resetForm = () => {
   formData.brandId = ''
   formData.price = 0
   formData.stock = 0
-  formData.status = 'ON_SALE'
+  formData.status = 'on'
 }
 
 onMounted(() => {
@@ -567,6 +580,24 @@ onMounted(() => {
 .action-link:hover {
   color: #40a9ff;
   background: #e6f7ff;
+}
+
+.adjust-record {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  background: #fafafa;
+  border-radius: 6px;
+  font-weight: 500;
+  color: #333;
+}
+
+.adjust-code {
+  font-size: 13px;
+  font-weight: 400;
+  color: #999;
 }
 
 .action-btns {

@@ -1,11 +1,12 @@
 // 采购管理相关类型定义
 
 // 采购单状态
-export type PurchaseStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED'
+export type PurchaseStatus = 'DRAFT' | 'SUBMITTED' | 'APPROVED' | 'REJECTED' | 'CANCELLED'
 
 // 采购单状态映射
 export const purchaseStatusMap: Record<PurchaseStatus, { text: string; color: string }> = {
-  PENDING: { text: '待审核', color: 'orange' },
+  DRAFT: { text: '草稿', color: 'default' },
+  SUBMITTED: { text: '待审核', color: 'orange' },
   APPROVED: { text: '已通过', color: 'green' },
   REJECTED: { text: '已拒绝', color: 'red' },
   CANCELLED: { text: '已取消', color: 'default' },
@@ -13,43 +14,37 @@ export const purchaseStatusMap: Record<PurchaseStatus, { text: string; color: st
 
 // 采购申请明细项
 export interface PurchaseItem {
-  id?: string
-  productName: string       // 商品名称
-  spec: string              // 规格
-  quantity: number          // 数量
-  unitPrice: number         // 单价
-  subtotal: number          // 小计（自动计算）
-  remark?: string           // 备注
+  id?: number
+  orderId?: number
+  productId?: number          // 商品ID（可选）
+  productName: string         // 商品名称
+  quantity: number            // 数量
+  price: number               // 单价
 }
 
 // 采购单信息
 export interface PurchaseRecord {
-  id: string
-  purchaseNo: string         // 采购单号
-  supplierId: string         // 供应商ID
-  supplierName: string       // 供应商名称
-  applicantId: string        // 申请人ID
-  applicantName: string      // 申请人姓名
-  applyDate: string          // 申请日期
-  totalAmount: number        // 总金额
-  status: PurchaseStatus     // 状态
-  remark?: string            // 备注
-  auditRemark?: string       // 审核意见
-  auditorId?: string         // 审核人ID
-  auditorName?: string       // 审核人姓名
-  auditTime?: string         // 审核时间
-  items: PurchaseItem[]      // 采购明细
+  id: number
+  orderNo: string             // 采购单号
+  storeId: number | null      // 门店ID
+  supplierId: number | null   // 供应商ID
+  applicantId: number | null  // 申请人ID
+  approverId: number | null   // 审核人ID
+  totalAmount: number         // 总金额
+  status: PurchaseStatus      // 状态
+  remark?: string             // 备注
+  items?: PurchaseItem[]      // 采购明细
   createdAt: string
-  updatedAt?: string
 }
 
-// 采购查询参数
+// 采购查询参数（后端仅分页，多余参数会被忽略）
 export interface PurchaseQueryParams {
-  purchaseNo?: string        // 采购单号
-  status?: PurchaseStatus    // 状态
-  supplierId?: string        // 供应商
-  startDate?: string         // 开始日期
-  endDate?: string           // 结束日期
+  purchaseNo?: string
+  orderNo?: string
+  status?: PurchaseStatus
+  supplierId?: string
+  startDate?: string
+  endDate?: string
   page: number
   pageSize: number
 }

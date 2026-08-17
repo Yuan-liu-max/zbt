@@ -45,7 +45,7 @@
             </div>
             <p class="section-desc">选择需要在首页展示的模块，拖拽可调整模块顺序</p>
             <div class="module-list">
-              <div v-for="(mod, index) in modules" :key="mod.key" class="module-item">
+              <div v-for="mod in modules" :key="mod.key" class="module-item">
                 <div class="module-left">
                   <span class="drag-handle">⋮⋮</span>
                   <div class="module-icon" :style="{ background: mod.color + '15', color: mod.color }">
@@ -205,7 +205,7 @@ const handleSave = async () => {
     await new Promise(resolve => setTimeout(resolve, 500))
     localStorage.setItem('dashboardSettings', JSON.stringify(config))
     message.success('设置已保存')
-  } catch { message.error('保存失败') }
+  } catch (error) { console.error('保存失败', error) }
   finally { saving.value = false }
 }
 

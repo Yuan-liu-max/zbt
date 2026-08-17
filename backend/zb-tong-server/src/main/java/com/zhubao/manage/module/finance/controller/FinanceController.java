@@ -1,6 +1,7 @@
 package com.zhubao.manage.module.finance.controller;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.zhubao.manage.common.annotation.OperateLog;
 import com.zhubao.manage.common.dto.ApiResult;
 import com.zhubao.manage.common.dto.PageDTO;
 import com.zhubao.manage.common.dto.PageResult;
@@ -44,12 +45,15 @@ public class FinanceController {
     @ApiOperation("交易详情") @GetMapping("/{id}")
     public ApiResult<Transaction> detail(@PathVariable Long id) { return ApiResult.ok(financeService.detail(id)); }
 
+    @OperateLog(module = "财务管理", action = "CREATE", targetType = "TRANSACTION")
     @ApiOperation("新增交易") @PostMapping
     public ApiResult<Transaction> create(@Valid @RequestBody Transaction t) { return ApiResult.ok(financeService.create(t)); }
 
+    @OperateLog(module = "财务管理", action = "UPDATE", targetType = "TRANSACTION", targetIdExpr = "#id")
     @ApiOperation("更新交易") @PutMapping("/{id}")
     public ApiResult<Transaction> update(@PathVariable Long id, @Valid @RequestBody Transaction t) { return ApiResult.ok(financeService.update(id, t)); }
 
+    @OperateLog(module = "财务管理", action = "DELETE", targetType = "TRANSACTION", targetIdExpr = "#id")
     @ApiOperation("删除交易") @DeleteMapping("/{id}")
     public ApiResult<Void> delete(@PathVariable Long id) { financeService.delete(id); return ApiResult.ok(); }
 }

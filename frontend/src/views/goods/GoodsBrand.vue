@@ -99,7 +99,23 @@
           <a-input v-model:value="formData.name" placeholder="请输入品牌名称" />
         </a-form-item>
         <a-form-item label="品牌LOGO" name="logo">
-          <a-input v-model:value="formData.logo" placeholder="请输入LOGO图片URL" />
+          <a-upload
+            :show-upload-list="false"
+            accept=".jpg,.jpeg,.png,.gif,.webp,.svg"
+            :before-upload="handleLogoUpload"
+          >
+            <div v-if="formData.logo" class="logo-preview">
+              <img :src="formData.logo" alt="品牌LOGO" />
+              <div class="logo-mask">
+                <a-button type="link" size="small" @click.stop="removeLogo">删除</a-button>
+              </div>
+            </div>
+            <div v-else class="logo-uploader">
+              <PlusOutlined />
+              <div class="logo-uploader-text">上传LOGO</div>
+            </div>
+          </a-upload>
+          <div v-if="logoUploading" class="logo-uploading">上传中...</div>
         </a-form-item>
         <a-form-item label="品牌产地" name="origin">
           <a-input v-model:value="formData.origin" placeholder="请输入品牌产地" />
@@ -122,11 +138,51 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, onMounted, onUnmounted } from 'vue'
 import { message } from 'ant-design-vue'
 import { PlusOutlined } from '@ant-design/icons-vue'
-import type { BrandItem, BrandQueryParams, GoodsStatus } from '@/types/goods'
+import { useCrudTable } from '@/composables/useCrudTable'
+import type { BrandItem, GoodsStatus } from '@/types/goods'
 import { brandApi } from '@/api/goods'
+import request from '@/utils/request'
+
+// LOGO 上传
+const logoUploading = ref(false)
+
+const handleLogoUpload = (file: File) => {
+  const isImage = /^image\/(jpeg|png|gif|webp|svg\+xml)$/.test(file.type) || /\.(jpg|jpeg|png|gif|webp|svg)$/i.test(file.name)
+  if (!isImage) {
+    message.error('只能上传图片文件')
+    return false
+  }
+  if (file.size > 2 * 1024 * 1024) {
+    message.error('图片大小不能超过2MB')
+    return false
+  }
+  logoUploading.value = true
+  const uploadForm = new FormData()
+  uploadForm.append('file', file)
+  request
+    .post('/files/upload', uploadForm)
+    .then((res: any) => {
+      const url = res?.fileUrl
+      if (!url) throw new Error('上传失败')
+      formData.logo = url
+      message.success('LOGO上传成功')
+    })
+    .catch((error) => {
+      console.error('LOGO上传失败', error)
+      message.error('LOGO上传失败')
+    })
+    .finally(() => {
+      logoUploading.value = false
+    })
+  return false
+}
+
+const removeLogo = () => {
+  formData.logo = ''
+}
 
 // 搜索表单
 const searchForm = reactive({
@@ -134,16 +190,12 @@ const searchForm = reactive({
   status: undefined as GoodsStatus | undefined
 })
 
-// 表格数据
-const tableData = ref<BrandItem[]>([])
-const loading = ref(false)
-const pagination = reactive({
-  current: 1,
-  size: 10,
-  total: 0,
-  showSizeChanger: true,
-  showQuickJumper: true,
-  showTotal: (total: number) => `共 ${total} 条`
+// CRUD 表格逻辑
+const { tableData, loading, pagination, loadData, handleSearch, handleTableChange, handleDelete } = useCrudTable({
+  searchForm,
+  loadFn: (params) => brandApi.getList(params),
+  deleteFn: (id) => brandApi.delete(id),
+  onDeleteSuccess: () => message.success('删除成功'),
 })
 
 // 表格列配置（移动端自适应）
@@ -195,44 +247,11 @@ const formRules = {
   sort: [{ required: true, message: '请输入排序', trigger: 'blur' }]
 }
 
-// 加载数据
-const loadData = async () => {
-  loading.value = true
-  try {
-    const params: BrandQueryParams = {
-      name: searchForm.name || undefined,
-      status: searchForm.status,
-      page: pagination.current,
-      pageSize: pagination.pageSize
-    }
-    const res = await brandApi.getList(params)
-    tableData.value = res.list
-    pagination.total = res.total
-  } catch (error) {
-    message.error('加载数据失败')
-  } finally {
-    loading.value = false
-  }
-}
-
-// 搜索
-const handleSearch = () => {
-  pagination.current = 1
-  loadData()
-}
-
 // 重置
 const handleReset = () => {
   searchForm.name = ''
   searchForm.status = undefined
   handleSearch()
-}
-
-// 表格分页
-const handleTableChange = (pag: any) => {
-  pagination.current = pag.current
-  pagination.pageSize = pag.pageSize
-  loadData()
 }
 
 // 新增
@@ -253,17 +272,6 @@ const handleEdit = (record: BrandItem) => {
   formData.status = record.status
   formData.description = record.description || ''
   modalVisible.value = true
-}
-
-// 删除
-const handleDelete = async (id: string) => {
-  try {
-    await brandApi.delete(id)
-    message.success('删除成功')
-    loadData()
-  } catch (error) {
-    message.error('删除失败')
-  }
 }
 
 // 弹窗确认
@@ -406,6 +414,67 @@ onUnmounted(() => {
 
 .danger-link:hover {
   color: #ff7875;
+}
+
+/* LOGO 上传 */
+.logo-uploader {
+  width: 104px;
+  height: 104px;
+  border: 1px dashed #d9d9d9;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: border-color 0.3s;
+  color: #999;
+  font-size: 14px;
+}
+
+.logo-uploader:hover {
+  border-color: #c8a44d;
+}
+
+.logo-uploader-text {
+  font-size: 12px;
+}
+
+.logo-preview {
+  position: relative;
+  width: 104px;
+  height: 104px;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid #f0f0f0;
+}
+
+.logo-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.logo-preview .logo-mask {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+
+.logo-preview:hover .logo-mask {
+  opacity: 1;
+}
+
+.logo-uploading {
+  margin-top: 8px;
+  font-size: 12px;
+  color: #999;
 }
 
 /* 表格横向滚动 */

@@ -104,7 +104,6 @@
                 <template #overlay>
                   <a-menu>
                     <a-menu-item @click="handleEdit(record)">编辑</a-menu-item>
-                    <a-menu-item @click="handleView(record)">查看详情</a-menu-item>
                     <a-menu-item @click="handleDelete(record)">
                       <span class="danger-link">删除</span>
                     </a-menu-item>
@@ -170,8 +169,11 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
+import dayjs from 'dayjs'
 import { PlusOutlined, SearchOutlined, DownOutlined } from '@ant-design/icons-vue'
-import type { CertificateItem, CertificateQueryParams, CertificateType, CertificateStatus } from '@/types/certificate'
+import { useCrudTable } from '@/composables/useCrudTable'
+import { useDetailModal } from '@/composables/useDetailModal'
+import type { CertificateItem, CertificateType, CertificateStatus } from '@/types/certificate'
 import { certificateApi, certificateTypeMap, certificateStatusMap } from '@/api/certificate'
 
 // 搜索表单
@@ -183,18 +185,24 @@ const searchForm = reactive({
   dateRange: null as any
 })
 
-// 表格数据
-const tableData = ref<CertificateItem[]>([])
-const loading = ref(false)
-const selectedRowKeys = ref<string[]>([])
-const pagination = reactive({
-  current: 1,
-  size: 10,
-  total: 0,
-  showSizeChanger: true,
-  showQuickJumper: true,
-  showTotal: (total: number) => `共 ${total} 条`
+// 表格数据（使用 useCrudTable composable）
+const { tableData, loading, pagination, loadData, handleSearch, handleTableChange, handleDelete: _handleDelete } = useCrudTable<CertificateItem, typeof searchForm>({
+  searchForm,
+  loadFn: (params) => certificateApi.getList({
+    code: (params as any).code || undefined,
+    type: (params as any).type,
+    status: (params as any).status,
+    issuer: (params as any).issuer || undefined,
+    startDate: searchForm.dateRange?.[0]?.format?.('YYYY-MM-DD') || undefined,
+    endDate: searchForm.dateRange?.[1]?.format?.('YYYY-MM-DD') || undefined,
+    page: params.page || 1,
+    pageSize: params.pageSize || 10,
+  }),
+  deleteFn: (id) => certificateApi.delete(id),
+  onDeleteSuccess: () => message.success('删除成功'),
 })
+
+const selectedRowKeys = ref<string[]>([])
 
 // 表格列配置
 const columns = [
@@ -208,9 +216,8 @@ const columns = [
   { title: '操作', key: 'action', width: 160, fixed: 'right' as const }
 ]
 
-// 详情弹窗
-const detailVisible = ref(false)
-const detailRecord = ref<any>(null)
+// 详情弹窗（使用 useDetailModal composable）
+const { detailVisible, detailRecord, openDetail } = useDetailModal<CertificateItem>()
 
 // 弹窗相关
 const modalVisible = ref(false)
@@ -238,37 +245,7 @@ const onSelectChange = (keys: string[]) => {
   selectedRowKeys.value = keys
 }
 
-// 加载数据
-const loadData = async () => {
-  loading.value = true
-  try {
-    const params: CertificateQueryParams = {
-      code: searchForm.code || undefined,
-      type: searchForm.type,
-      status: searchForm.status,
-      issuer: searchForm.issuer || undefined,
-      startDate: searchForm.dateRange?.[0]?.format?.('YYYY-MM-DD') || undefined,
-      endDate: searchForm.dateRange?.[1]?.format?.('YYYY-MM-DD') || undefined,
-      page: pagination.current,
-      pageSize: pagination.pageSize
-    }
-    const res = await certificateApi.getList(params)
-    tableData.value = res.list
-    pagination.total = res.total
-  } catch (error) {
-    message.error('加载数据失败')
-  } finally {
-    loading.value = false
-  }
-}
-
-// 搜索
-const handleSearch = () => {
-  pagination.current = 1
-  loadData()
-}
-
-// 重置
+// 重置（覆盖 composable 版本以正确清空表单字段）
 const handleReset = () => {
   searchForm.code = ''
   searchForm.type = undefined
@@ -278,13 +255,6 @@ const handleReset = () => {
   handleSearch()
 }
 
-// 分页
-const handleTableChange = (pag: any) => {
-  pagination.current = pag.current
-  pagination.pageSize = pag.pageSize
-  loadData()
-}
-
 // 新增
 const handleAdd = () => {
   isEdit.value = false
@@ -292,15 +262,18 @@ const handleAdd = () => {
   modalVisible.value = true
 }
 
-// 查看
+// 查看（使用 useDetailModal 的 openDetail）
 const handleView = (record: CertificateItem) => {
-  detailRecord.value = record
-  detailVisible.value = true
+  openDetail(record)
 }
 
 // 下载
 const handleDownload = (record: CertificateItem) => {
-  message.success(`下载 ${record.code}`)
+  if (record.fileUrl) {
+    window.open(record.fileUrl, '_blank')
+  } else {
+    message.info('该证书未上传文件')
+  }
 }
 
 // 编辑
@@ -310,19 +283,15 @@ const handleEdit = (record: CertificateItem) => {
   formData.type = record.type
   formData.productName = record.productName
   formData.issuer = record.issuer
+  formData.issueDate = record.issueDate ? dayjs(record.issueDate) : null
+  formData.expiryDate = record.expiryDate ? dayjs(record.expiryDate) : null
   formData.remark = record.remark || ''
   modalVisible.value = true
 }
 
-// 删除
-const handleDelete = async (record: CertificateItem) => {
-  try {
-    await certificateApi.delete(record.id)
-    message.success('删除成功')
-    loadData()
-  } catch (error) {
-    message.error('删除失败')
-  }
+// 删除（包装 composable 版本，保留 record 参数签名）
+const handleDelete = (record: CertificateItem) => {
+  _handleDelete(record.id)
 }
 
 // 弹窗确认

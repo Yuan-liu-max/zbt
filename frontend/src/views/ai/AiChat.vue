@@ -21,6 +21,12 @@
               <div class="message-time">{{ msg.time }}</div>
             </div>
           </div>
+          <div v-if="sending" class="message assistant">
+            <div class="message-avatar"><div class="avatar ai">AI</div></div>
+            <div class="message-content">
+              <div class="message-text"><a-spin size="small" /> AI 思考中...</div>
+            </div>
+          </div>
         </div>
 
         <!-- 快捷问题 -->
@@ -51,44 +57,81 @@
       <div class="chat-sidebar">
         <div class="sidebar-header">
           <span>历史记录</span>
-          <a class="clear-link" @click="handleClear">清空</a>
+          <a-popconfirm title="确定要清空所有历史记录吗？" @confirm="handleClear">
+            <a class="clear-link">清空</a>
+          </a-popconfirm>
         </div>
         <div class="history-list">
-          <div v-for="item in history" :key="item.id" class="history-item" @click="handleHistoryClick(item)">
+          <div v-for="item in pagedHistory" :key="item.id" class="history-item" @click="handleHistoryClick(item)">
             <div class="history-title">{{ item.title }}</div>
             <div class="history-time">{{ item.time }}</div>
           </div>
         </div>
+        <a-pagination
+          v-if="history.length > historyPageSize"
+          class="history-pagination"
+          size="small"
+          simple
+          :current="historyPage"
+          :page-size="historyPageSize"
+          :total="history.length"
+          @change="handleHistoryPageChange"
+        />
       </div>
     </div>
+
+    <!-- 历史详情 -->
+    <a-modal v-model:open="historyVisible" :title="currentHistory?.title || '历史详情'" :footer="null" width="640px">
+      <a-descriptions :column="1" bordered size="small">
+        <a-descriptions-item label="时间">{{ currentHistory?.createdAt ?? '-' }}</a-descriptions-item>
+        <a-descriptions-item label="模型">{{ currentHistory?.modelName || '-' }}</a-descriptions-item>
+        <a-descriptions-item label="问题">
+          <div class="history-detail-content">{{ currentHistory?.question || '-' }}</div>
+        </a-descriptions-item>
+        <a-descriptions-item label="回答">
+          <div class="history-detail-content">{{ currentHistory?.answer || '（暂无内容）' }}</div>
+        </a-descriptions-item>
+      </a-descriptions>
+    </a-modal>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, nextTick } from 'vue'
+import { ref, computed, nextTick, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
 import { SendOutlined } from '@ant-design/icons-vue'
 import type { ChatMessage } from '@/types/ai-tools'
-import { mockChatMessages } from '@/api/ai'
+import { aiApi } from '@/api/ai'
 
-const messages = ref<ChatMessage[]>([...mockChatMessages])
+const messages = ref<ChatMessage[]>([])
 const inputText = ref('')
+const sending = ref(false)
 const messagesRef = ref<HTMLElement>()
 
 const quickQuestions = [
   '如何创建销售新客户？', '供应商资质审核流程是怎样的？', '最近的销售数据是怎样的？'
 ]
 
-const history = ref([
-  { id: '1', title: '如何创建销售客户？', time: '07-10 10:30' },
-  { id: '2', title: '供应商资质审核流程是怎样的？', time: '07-10 09:15' },
-  { id: '3', title: '最近的销售数据是怎样的？', time: '07-09 16:45' },
-  { id: '4', title: '如何生成销售报表？', time: '07-09 14:20' },
-  { id: '5', title: '库存管理规则怎么设置？', time: '07-08 11:30' },
-])
+interface HistoryItem {
+  id: string
+  title: string
+  time: string
+  question: string
+  answer: string
+  modelName?: string
+  createdAt?: string
+}
+const history = ref<HistoryItem[]>([])
+const historyPageSize = 8
+const historyPage = ref(1)
+const pagedHistory = computed(() => {
+  const start = (historyPage.value - 1) * historyPageSize
+  return history.value.slice(start, start + historyPageSize)
+})
 
 const formatMessage = (content: string) => {
-  return content.replace(/\n/g, '<br>')
+  const escaped = content.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+  return escaped.replace(/\n/g, '<br>')
 }
 
 const scrollToBottom = async () => {
@@ -98,9 +141,26 @@ const scrollToBottom = async () => {
   }
 }
 
+const loadHistory = async () => {
+  try {
+    const results = await aiApi.getChatHistory()
+    history.value = results.slice(0, 20).map(r => ({
+      id: String(r.id),
+      title: r.question ? r.question.slice(0, 30) : '（空问题）',
+      time: (r.createdAt || '').slice(5, 16),
+      question: r.question || '',
+      answer: r.answer || '',
+      modelName: r.modelName,
+      createdAt: r.createdAt
+    }))
+  } catch (e) {
+    // 历史记录加载失败不阻塞聊天
+  }
+}
+
 const handleSend = async () => {
   const text = inputText.value.trim()
-  if (!text) return
+  if (!text || sending.value) return
 
   messages.value.push({
     id: String(Date.now()),
@@ -110,16 +170,28 @@ const handleSend = async () => {
   })
   inputText.value = ''
   scrollToBottom()
+  sending.value = true
 
-  setTimeout(() => {
+  try {
+    const reply = await aiApi.chat(text)
     messages.value.push({
       id: String(Date.now()),
       role: 'assistant',
-      content: '正在分析您的问题，请稍候...\n\n根据您的描述，我建议您：\n\n1. 首先检查相关数据\n2. 分析当前业务状况\n3. 制定改进方案\n\n如需更详细的分析，请告诉我具体需求。',
+      content: reply.reply,
       time: new Date().toTimeString().slice(0, 5)
     })
+    loadHistory()
+  } catch (e) {
+    messages.value.push({
+      id: String(Date.now()),
+      role: 'assistant',
+      content: '抱歉，AI 服务暂时不可用，请稍后重试。',
+      time: new Date().toTimeString().slice(0, 5)
+    })
+  } finally {
+    sending.value = false
     scrollToBottom()
-  }, 1000)
+  }
 }
 
 const handleQuickQuestion = (q: string) => {
@@ -127,13 +199,29 @@ const handleQuickQuestion = (q: string) => {
   handleSend()
 }
 
-const handleClear = () => {
-  messages.value = [mockChatMessages[0]]
-  message.success('已清空对话')
+const handleClear = async () => {
+  messages.value = []
+  history.value = []
+  historyPage.value = 1
+  inputText.value = ''
+  try { await aiApi.clearChatHistory() } catch (e) { /* 忽略清空失败 */ }
+  message.success('已清空历史记录')
 }
 
-const handleHistoryClick = (item: any) => {
-  message.info(`查看历史：${item.title}`)
+const handleHistoryPageChange = (page: number) => {
+  historyPage.value = page
+}
+
+onMounted(() => {
+  loadHistory()
+})
+
+
+const historyVisible = ref(false)
+const currentHistory = ref<HistoryItem | null>(null)
+const handleHistoryClick = (item: HistoryItem) => {
+  currentHistory.value = item
+  historyVisible.value = true
 }
 </script>
 
@@ -256,6 +344,7 @@ const handleHistoryClick = (item: any) => {
 .clear-link:hover { color: #c8a44d; }
 
 .history-list { flex: 1; overflow-y: auto; padding: 8px 0; }
+.history-pagination { padding: 8px 12px; text-align: center; }
 
 .history-item {
   padding: 12px 20px;
@@ -267,6 +356,14 @@ const handleHistoryClick = (item: any) => {
 
 .history-title { font-size: 13px; color: #333; margin-bottom: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .history-time { font-size: 11px; color: #999; }
+
+.history-detail-content {
+  white-space: pre-wrap;
+  max-height: 360px;
+  overflow-y: auto;
+  line-height: 1.7;
+  color: #333;
+}
 
 @media (max-width: 768px) {
   .page-container { padding: 16px; }

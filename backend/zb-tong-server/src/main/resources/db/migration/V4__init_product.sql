@@ -22,6 +22,7 @@ CREATE TABLE `product` (
     `gross_margin_rate` DECIMAL(5,2)  NULL     DEFAULT NULL COMMENT '毛利率(%)(权限控制)',
     `status`            VARCHAR(20)   NOT NULL DEFAULT 'ON_SALE' COMMENT 'ON_SALE/SOLD/TRANSFER/REPAIR/OFF_SHELF',
     `store_id`          BIGINT        NULL     DEFAULT NULL COMMENT '所属门店ID',
+    `image_url`         VARCHAR(500)  NULL     DEFAULT NULL COMMENT '商品图片URL',
     `is_deleted`        TINYINT       NOT NULL DEFAULT 0  COMMENT '逻辑删除 0=否 1=是',
     `created_at`        DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     `updated_at`        DATETIME      NULL     DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',

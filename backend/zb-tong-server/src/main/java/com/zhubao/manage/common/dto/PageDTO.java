@@ -16,7 +16,7 @@ public class PageDTO {
 
     @JsonProperty("pageSize")
     @Min(1)
-    @Max(100)
+    @Max(2000)
     private long size = 20;
 
     public PageDTO() {}

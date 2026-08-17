@@ -12,9 +12,10 @@
     <div class="content-card tab-card">
       <a-tabs v-model:activeKey="activeTab" @change="handleTabChange">
         <a-tab-pane key="all" tab="全部" />
-        <a-tab-pane key="general" tab="通用模板" />
-        <a-tab-pane key="review" tab="审核模板" />
-        <a-tab-pane key="process" tab="流程模板" />
+        <a-tab-pane key="HUMAN" tab="人效" />
+        <a-tab-pane key="PRODUCT" tab="货品" />
+        <a-tab-pane key="SCENE" tab="场景" />
+        <a-tab-pane key="COMPREHENSIVE" tab="综合" />
       </a-tabs>
 
       <!-- 搜索表单 -->
@@ -52,9 +53,9 @@
         :scroll="{ x: 800 }"
       >
         <template #bodyCell="{ column, record }">
-          <template v-if="column.key === 'type'">
-            <a-tag :color="typeColorMap[record.type] || 'default'" size="small">
-              {{ taskTypeMap[record.type] || record.type }}
+          <template v-if="column.key === 'dimension'">
+            <a-tag :color="typeColorMap[record.dimension] || 'default'" size="small">
+              {{ taskTypeMap[record.dimension] || record.dimension }}
             </a-tag>
           </template>
           <template v-if="column.key === 'action'">
@@ -99,9 +100,9 @@
         </a-form-item>
         <a-form-item label="模板类型" name="type">
           <a-select v-model:value="formData.type" placeholder="请选择模板类型">
-            <a-select-option value="general">通用模板</a-select-option>
-            <a-select-option value="review">审核模板</a-select-option>
-            <a-select-option value="process">流程模板</a-select-option>
+            <a-select-option v-for="(label, value) in taskTypeMap" :key="value" :value="value">
+              {{ label }}
+            </a-select-option>
           </a-select>
         </a-form-item>
       </a-form>
@@ -116,46 +117,45 @@ import { message, Modal } from 'ant-design-vue'
 
 const router = useRouter()
 import { PlusOutlined, SearchOutlined, DownOutlined } from '@ant-design/icons-vue'
-import type { TaskTemplate, TemplateQueryParams } from '@/types/task'
+import type { TaskTemplate, TaskDimension } from '@/types/task'
 import { templateApi } from '@/api/task'
+import { useCrudTable } from '@/composables/useCrudTable'
 
 // 本地映射表
-type LocalTaskType = 'HUMAN' | 'PRODUCT' | 'SCENE' | 'COMPREHENSIVE'
-const taskTypeMap: Record<LocalTaskType, string> = { HUMAN: '人效', PRODUCT: '货品', SCENE: '场景', COMPREHENSIVE: '综合' }
+const taskTypeMap: Record<string, string> = { HUMAN: '人效', PRODUCT: '货品', SCENE: '场景', COMPREHENSIVE: '综合' }
 
 // 标签页
 const activeTab = ref<string>('all')
 
 // 搜索表单
 const searchForm = reactive({
-  name: ''
+  name: '',
+  dimension: undefined as string | undefined
 })
 
-// 表格数据
-const tableData = ref<TaskTemplate[]>([])
-const loading = ref(false)
-const pagination = reactive({
-  current: 1,
-  pageSize: 10,
-  total: 0,
-  showSizeChanger: true,
-  showQuickJumper: true,
-  showTotal: (total: number) => `共 ${total} 条`
+// 表格数据（useCrudTable 封装，name -> templateName）
+const { tableData, loading, pagination, loadData, handleSearch, handleTableChange } = useCrudTable<any, typeof searchForm>({
+  searchForm,
+  loadFn: (params) => {
+    const p: any = { ...params, templateName: params.name }
+    delete p.name
+    return templateApi.getList(p)
+  },
 })
 
-// 模板类型颜色映射
+// 模板类型颜色映射（dimension 枚举）
 const typeColorMap: Record<string, string> = {
-  general: 'blue',
-  review: 'orange',
-  approval: 'purple',
-  process: 'green'
+  HUMAN: 'blue',
+  PRODUCT: 'green',
+  SCENE: 'orange',
+  COMPREHENSIVE: 'purple'
 }
 
 // 表格列配置
 const columns = [
-  { title: '模板名称', dataIndex: 'name', key: 'name', width: 200 },
-  { title: '模板类型', dataIndex: 'type', key: 'type', width: 120, align: 'center' as const },
-  { title: '创建人', dataIndex: 'creator', key: 'creator', width: 100 },
+  { title: '模板名称', dataIndex: 'templateName', key: 'templateName', width: 200 },
+  { title: '模板类型', dataIndex: 'dimension', key: 'dimension', width: 120, align: 'center' as const },
+  { title: '创建人', dataIndex: 'createdBy', key: 'createdBy', width: 100 },
   { title: '创建时间', dataIndex: 'createdAt', key: 'createdAt', width: 170 },
   { title: '更新时间', dataIndex: 'updatedAt', key: 'updatedAt', width: 170 },
   { title: '操作', key: 'action', width: 180, fixed: 'right' as const }
@@ -169,7 +169,7 @@ const editId = ref('')
 const formRef = ref()
 const formData = reactive({
   name: '',
-  type: undefined as LocalTaskType | undefined
+  type: undefined as TaskDimension | undefined
 })
 
 const formRules = {
@@ -177,38 +177,9 @@ const formRules = {
   type: [{ required: true, message: '请选择模板类型', trigger: 'change' }]
 }
 
-// 当前筛选类型
-const currentType = ref<LocalTaskType | undefined>(undefined)
-
-// 加载数据
-const loadData = async () => {
-  loading.value = true
-  try {
-    const params: TemplateQueryParams = {
-      name: searchForm.name || undefined,
-      type: currentType.value,
-      page: pagination.current,
-      pageSize: pagination.pageSize
-    }
-    const res = await templateApi.getList(params)
-    tableData.value = res.list
-    pagination.total = res.total
-  } catch (error) {
-    message.error('加载数据失败')
-  } finally {
-    loading.value = false
-  }
-}
-
 // 标签页切换
 const handleTabChange = (key: string) => {
-  currentType.value = key === 'all' ? undefined : (key as LocalTaskType)
-  pagination.current = 1
-  loadData()
-}
-
-// 搜索
-const handleSearch = () => {
+  searchForm.dimension = key === 'all' ? undefined : key
   pagination.current = 1
   loadData()
 }
@@ -216,14 +187,8 @@ const handleSearch = () => {
 // 重置
 const handleReset = () => {
   searchForm.name = ''
+  searchForm.dimension = undefined
   handleSearch()
-}
-
-// 表格分页
-const handleTableChange = (pag: any) => {
-  pagination.current = pag.current
-  pagination.pageSize = pag.pageSize
-  loadData()
 }
 
 // 新增
@@ -237,9 +202,9 @@ const handleAdd = () => {
 // 编辑
 const handleEdit = (record: TaskTemplate) => {
   isEdit.value = true
-  editId.value = record.id
-  formData.name = record.name
-  formData.type = record.type
+  editId.value = String(record.id)
+  formData.name = record.templateName
+  formData.type = record.dimension
   modalVisible.value = true
 }
 
@@ -268,13 +233,13 @@ const handleMoreAction = (action: string, record: TaskTemplate) => {
 const handleCopy = async (record: TaskTemplate) => {
   try {
     await templateApi.create({
-      name: `${record.name}（副本）`,
-      type: record.type
+      templateName: `${record.templateName}（副本）`,
+      dimension: record.dimension
     })
     message.success('复制成功')
     loadData()
   } catch (error) {
-    message.error('复制失败')
+    console.error('复制失败', error)
   }
 }
 
@@ -282,11 +247,11 @@ const handleCopy = async (record: TaskTemplate) => {
 const handleDelete = (record: TaskTemplate) => {
   Modal.confirm({
     title: '确认删除',
-    content: `确定要删除模板「${record.name}」吗？`,
+    content: `确定要删除模板「${record.templateName}」吗？`,
     okText: '确定',
     cancelText: '取消',
     onOk: async () => {
-      await templateApi.delete(record.id)
+      await templateApi.delete(String(record.id))
       message.success('删除成功')
       loadData()
     }
@@ -299,17 +264,13 @@ const handleModalOk = async () => {
     await formRef.value?.validateFields()
     modalLoading.value = true
 
+    const payload = { templateName: formData.name, dimension: formData.type }
+
     if (isEdit.value) {
-      await templateApi.update(editId.value, {
-        name: formData.name,
-        type: formData.type
-      })
+      await templateApi.update(editId.value, payload)
       message.success('编辑成功')
     } else {
-      await templateApi.create({
-        name: formData.name,
-        type: formData.type
-      })
+      await templateApi.create(payload)
       message.success('新增成功')
     }
 

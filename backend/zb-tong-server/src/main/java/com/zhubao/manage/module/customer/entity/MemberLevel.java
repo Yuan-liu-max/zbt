@@ -10,7 +10,7 @@ import java.math.BigDecimal;
 public class MemberLevel {
     @TableId(type = IdType.AUTO) private Long id;
     private String name;
-    @JsonProperty("标识") private String identifier;
+    @JsonProperty(value = "标识", access = JsonProperty.Access.READ_WRITE) private String identifier;
     private Integer memberCount;
     private BigDecimal totalConsumption;
     private Integer pointsMultiplier;

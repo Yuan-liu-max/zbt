@@ -39,16 +39,19 @@
           <a-tree
             v-if="filteredTreeData.length"
             :tree-data="filteredTreeData"
-            :field-names="{ title: 'name', key: 'id', children: 'children' }"
+            :field-names="{ title: 'orgName', key: 'id', children: 'children' }"
             default-expand-all
             :selected-keys="selectedKeys"
             @select="onTreeSelect"
           >
-            <template #title="{ name, memberCount }">
-              <span>{{ name }}</span>
-              <a-tag color="blue" style="margin-left: 8px; font-size: 12px">
-                {{ memberCount }}人
-              </a-tag>
+            <template #title="{ orgName, id }">
+              <span>{{ orgName }}</span>
+              <span class="tree-actions">
+                <a class="tree-action" @click.stop="handleEditNode(id)">编辑</a>
+                <a-popconfirm title="确定删除该部门吗？" @confirm="handleDeleteNode(id)">
+                  <a class="tree-action danger" @click.stop>删除</a>
+                </a-popconfirm>
+              </span>
             </template>
           </a-tree>
           <a-empty v-else description="暂无组织数据" />
@@ -85,25 +88,17 @@
         ref="formRef"
         :rules="formRules"
       >
-        <a-form-item label="部门名称" name="name">
-          <a-input v-model:value="formData.name" placeholder="请输入部门名称" />
+        <a-form-item label="部门名称" name="orgName">
+          <a-input v-model:value="formData.orgName" placeholder="请输入部门名称" />
         </a-form-item>
         <a-form-item label="上级部门" name="parentId">
           <a-tree-select
             v-model:value="formData.parentId"
             :tree-data="parentTreeData"
-            :field-names="{ label: 'name', value: 'id', children: 'children' }"
+            :field-names="{ label: 'orgName', value: 'id', children: 'children' }"
             placeholder="请选择上级部门"
             allow-clear
             tree-default-expand-all
-          />
-        </a-form-item>
-        <a-form-item label="成员数" name="memberCount">
-          <a-input-number
-            v-model:value="formData.memberCount"
-            :min="0"
-            style="width: 100%"
-            placeholder="请输入成员数量"
           />
         </a-form-item>
       </a-form>
@@ -112,9 +107,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, h, defineComponent } from 'vue'
+import { ref, reactive, computed, onMounted, h, defineComponent, type VNode } from 'vue'
 import { message, type FormInstance } from 'ant-design-vue'
-import { PlusOutlined, SearchOutlined, DownloadOutlined } from '@ant-design/icons-vue'
+import { PlusOutlined, DownloadOutlined } from '@ant-design/icons-vue'
 import type { OrgNode } from '@/types/system'
 import { orgApi } from '@/api/system'
 
@@ -127,8 +122,8 @@ const OrgChartNode = defineComponent({
       required: true,
     },
   },
-  setup(props) {
-    return () => {
+  setup(props: { nodes: OrgNode[] }) {
+    const renderChart = (): VNode | null => {
       if (!props.nodes || props.nodes.length === 0) return null
 
       return h('div', { class: 'org-chart-level' }, [
@@ -136,8 +131,7 @@ const OrgChartNode = defineComponent({
           ...props.nodes.map((node) =>
             h('div', { class: 'org-chart-node-wrapper', key: node.id }, [
               h('div', { class: 'org-chart-node' }, [
-                h('div', { class: 'org-node-name' }, node.name),
-                h('div', { class: 'org-node-count' }, `${node.memberCount}人`),
+                h('div', { class: 'org-node-name' }, node.orgName),
               ]),
               // 递归渲染子节点
               node.children && node.children.length > 0
@@ -155,6 +149,7 @@ const OrgChartNode = defineComponent({
         ]),
       ])
     }
+    return renderChart
   },
 })
 
@@ -171,14 +166,16 @@ const editingNode = ref<OrgNode | null>(null)
 const formRef = ref<FormInstance>()
 
 const formData = reactive({
-  name: '',
+  orgName: '',
   parentId: null as string | null,
-  memberCount: 0,
+  orgType: 'DEPT',
+  orgCode: '',
+  sortOrder: 0,
+  status: 'ENABLED',
 })
 
 const formRules = {
-  name: [{ required: true, message: '请输入部门名称', trigger: 'blur' }],
-  memberCount: [{ required: true, message: '请输入成员数量', trigger: 'blur' }],
+  orgName: [{ required: true, message: '请输入部门名称', trigger: 'blur' }],
 }
 
 // ==================== 计算属性 ====================
@@ -201,17 +198,27 @@ const parentTreeData = computed(() => {
 const loadData = async () => {
   loading.value = true
   try {
-    orgTreeData.value = await orgApi.getTree()
+    const data = await orgApi.getTree()
+    orgTreeData.value = normalizeTree(data)
   } finally {
     loading.value = false
   }
 }
 
+// 将后端返回的 id 统一转为字符串，便于树组件/查找/提交
+const normalizeTree = (nodes: OrgNode[]): OrgNode[] =>
+  nodes.map((node) => ({
+    ...node,
+    id: String(node.id),
+    parentId: node.parentId ? String(node.parentId) : null,
+    children: node.children ? normalizeTree(node.children) : undefined,
+  }))
+
 // 搜索过滤树
 function filterTree(nodes: OrgNode[], keyword: string): OrgNode[] {
   return nodes.reduce<OrgNode[]>((acc, node) => {
     const childMatches = node.children ? filterTree(node.children, keyword) : []
-    if (node.name.includes(keyword) || childMatches.length > 0) {
+    if ((node.orgName || node.name || '').includes(keyword) || childMatches.length > 0) {
       acc.push({
         ...node,
         children: childMatches.length > 0 ? childMatches : node.children,
@@ -243,35 +250,6 @@ function findNode(nodes: OrgNode[], id: string): OrgNode | null {
   return null
 }
 
-// 在树中更新节点
-function updateNodeInTree(nodes: OrgNode[], id: string, data: Partial<OrgNode>): OrgNode[] {
-  return nodes.map((node) => {
-    if (node.id === id) {
-      return { ...node, ...data }
-    }
-    if (node.children) {
-      return { ...node, children: updateNodeInTree(node.children, id, data) }
-    }
-    return node
-  })
-}
-
-// 在树中添加节点
-function addNodeToTree(nodes: OrgNode[], parentId: string | null, newNode: OrgNode): OrgNode[] {
-  if (!parentId) {
-    return [...nodes, newNode]
-  }
-  return nodes.map((node) => {
-    if (node.id === parentId) {
-      return { ...node, children: [...(node.children || []), newNode] }
-    }
-    if (node.children) {
-      return { ...node, children: addNodeToTree(node.children, parentId, newNode) }
-    }
-    return node
-  })
-}
-
 // 搜索
 const onSearch = (value: string) => {
   searchValue.value = value
@@ -285,10 +263,38 @@ const onTreeSelect = (keys: string[]) => {
 // 新增
 const handleAdd = () => {
   editingNode.value = null
-  formData.name = ''
+  formData.orgName = ''
   formData.parentId = selectedKeys.value.length ? selectedKeys.value[0] : null
-  formData.memberCount = 0
+  formData.orgType = 'DEPT'
+  formData.orgCode = ''
+  formData.sortOrder = 0
+  formData.status = 'ENABLED'
   modalVisible.value = true
+}
+
+// 编辑
+const handleEditNode = (id: string) => {
+  const node = findNode(orgTreeData.value, id)
+  if (!node) return
+  editingNode.value = node
+  formData.orgName = node.orgName || node.name || ''
+  formData.parentId = node.parentId ? String(node.parentId) : null
+  formData.orgType = node.orgType || 'DEPT'
+  formData.orgCode = node.orgCode || ''
+  formData.sortOrder = node.sortOrder ?? 0
+  formData.status = node.status || 'ENABLED'
+  modalVisible.value = true
+}
+
+// 删除
+const handleDeleteNode = async (id: string) => {
+  try {
+    await orgApi.delete(id)
+    message.success('删除成功')
+    loadData()
+  } catch {
+    message.error('删除失败')
+  }
 }
 
 // 导出
@@ -298,7 +304,7 @@ const handleExport = () => {
     nodes.forEach((node, index) => {
       const connector = index === nodes.length - 1 ? '└── ' : '├── '
       const childPrefix = index === nodes.length - 1 ? '    ' : '│   '
-      lines.push(`${prefix}${connector}${node.name} (${node.memberCount}人)`)
+      lines.push(`${prefix}${connector}${node.orgName || node.name}`)
       if (node.children) {
         lines.push(...flatten(node.children, prefix + childPrefix))
       }
@@ -308,7 +314,7 @@ const handleExport = () => {
 
   const output = orgTreeData.value
     .map((node) => {
-      const lines = [node.name + ` (${node.memberCount}人)`]
+      const lines = [node.orgName || node.name]
       if (node.children) lines.push(...flatten(node.children))
       return lines.join('\n')
     })
@@ -334,36 +340,27 @@ const handleModalOk = async () => {
 
   modalLoading.value = true
   try {
-    // 模拟保存延迟
-    await new Promise((resolve) => setTimeout(resolve, 500))
+    const payload: Partial<OrgNode> = {
+      orgName: formData.orgName,
+      parentId: formData.parentId,
+      orgType: formData.orgType || 'DEPT',
+      orgCode: formData.orgCode || `DEPT_${Date.now()}`,
+      sortOrder: formData.sortOrder ?? 0,
+      status: formData.status || 'ENABLED',
+    }
 
     if (editingNode.value) {
-      // 编辑
-      orgTreeData.value = updateNodeInTree(orgTreeData.value, editingNode.value.id, {
-        name: formData.name,
-        parentId: formData.parentId,
-        memberCount: formData.memberCount,
-      })
+      await orgApi.update(String(editingNode.value.id), payload)
       message.success('部门信息更新成功')
     } else {
-      // 新增
-      const newId = Date.now().toString()
-      const parentLevel = formData.parentId
-        ? (findNode(orgTreeData.value, formData.parentId)?.level || 0) + 1
-        : 1
-      const newNode: OrgNode = {
-        id: newId,
-        name: formData.name,
-        parentId: formData.parentId,
-        level: parentLevel,
-        memberCount: formData.memberCount,
-        children: [],
-      }
-      orgTreeData.value = addNodeToTree(orgTreeData.value, formData.parentId, newNode)
+      await orgApi.create(payload)
       message.success('部门新增成功')
     }
 
     modalVisible.value = false
+    await loadData()
+  } catch {
+    message.error('保存失败')
   } finally {
     modalLoading.value = false
   }
@@ -372,6 +369,7 @@ const handleModalOk = async () => {
 // 弹窗取消
 const handleModalCancel = () => {
   modalVisible.value = false
+  editingNode.value = null
   formRef.value?.resetFields()
 }
 
@@ -516,5 +514,27 @@ onMounted(() => {
   width: 2px;
   height: 16px;
   background: #d9d9d9;
+}
+
+.tree-actions {
+  margin-left: 8px;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+:deep(.ant-tree-node-content-wrapper:hover) .tree-actions,
+.tree-actions:hover {
+  opacity: 1;
+}
+
+.tree-action {
+  font-size: 12px;
+  color: #1890ff;
+  margin-left: 6px;
+  cursor: pointer;
+}
+
+.tree-action.danger {
+  color: #ff4d4f;
 }
 </style>

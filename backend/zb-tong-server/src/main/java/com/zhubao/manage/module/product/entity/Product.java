@@ -1,6 +1,7 @@
 package com.zhubao.manage.module.product.entity;
 
 import com.baomidou.mybatisplus.annotation.*;
+import com.fasterxml.jackson.annotation.JsonAlias;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Data;
 import javax.validation.constraints.DecimalMin;
@@ -12,10 +13,10 @@ import java.time.LocalDateTime;
 @TableName("product")
 public class Product {
     @TableId(type = IdType.AUTO) private Long id;
-    @NotBlank @JsonProperty("code") private String productCode;
+    @JsonProperty("code") private String productCode;
     @NotBlank @JsonProperty("name") private String productName;
     @NotBlank @JsonProperty("categoryName") private String category;
-    @DecimalMin("0.01") @JsonProperty("price") private BigDecimal retailPrice;
+    @DecimalMin("0") @JsonProperty("price") @JsonAlias("retailPrice") private BigDecimal retailPrice;
     @JsonProperty("brandName") private String style;
     private String material;
     private String weight;
@@ -27,9 +28,11 @@ public class Product {
     private BigDecimal grossMarginRate;
     private String status;
     private Long storeId;
+    @JsonProperty("stock") private Integer stock;
     @TableLogic private Integer isDeleted;
     @TableField(fill = FieldFill.INSERT) private LocalDateTime createdAt;
     @TableField(fill = FieldFill.INSERT_UPDATE) private LocalDateTime updatedAt;
-    @TableField(exist = false) @JsonProperty("stock") private Integer stock;
+    private LocalDateTime warningHandledAt;
+    private String imageUrl;
     @TableField(exist = false) @JsonProperty("storeName") private String storeName;
 }

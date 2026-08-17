@@ -19,6 +19,9 @@ public class OrderVO {
     private String paymentStatus;
     private String paymentMethod;
     private String deliveryMethod;
+    private String deliveryCompany;
+    private String deliveryTrackNo;
+    private String deliveryTime;
     private String remark;
     private String createdAt;
     private List<OrderLogVO> logs;
@@ -38,6 +41,9 @@ public class OrderVO {
     public String getPaymentStatus() { return paymentStatus; } public void setPaymentStatus(String v) { this.paymentStatus = v; }
     public String getPaymentMethod() { return paymentMethod; } public void setPaymentMethod(String v) { this.paymentMethod = v; }
     public String getDeliveryMethod() { return deliveryMethod; } public void setDeliveryMethod(String v) { this.deliveryMethod = v; }
+    public String getDeliveryCompany() { return deliveryCompany; } public void setDeliveryCompany(String v) { this.deliveryCompany = v; }
+    public String getDeliveryTrackNo() { return deliveryTrackNo; } public void setDeliveryTrackNo(String v) { this.deliveryTrackNo = v; }
+    public String getDeliveryTime() { return deliveryTime; } public void setDeliveryTime(String v) { this.deliveryTime = v; }
     public String getRemark() { return remark; } public void setRemark(String v) { this.remark = v; }
     public String getCreatedAt() { return createdAt; } public void setCreatedAt(String v) { this.createdAt = v; }
     public List<OrderLogVO> getLogs() { return logs; } public void setLogs(List<OrderLogVO> v) { this.logs = v; }

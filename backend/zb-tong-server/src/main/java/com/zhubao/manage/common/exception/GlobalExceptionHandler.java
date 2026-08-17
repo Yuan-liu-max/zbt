@@ -7,6 +7,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.BindException;
 import org.springframework.validation.FieldError;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.HttpMediaTypeNotSupportedException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -104,6 +105,15 @@ public class GlobalExceptionHandler {
     public ApiResult<Void> handleMaxUploadSize(MaxUploadSizeExceededException e) {
         log.warn("文件大小超出限制: {}", e.getMessage());
         return ApiResult.fail(ErrorCode.FILE_TOO_LARGE.getCode(), "上传文件大小超出限制");
+    }
+
+    // ==================== 权限异常 ====================
+
+    @ExceptionHandler(AccessDeniedException.class)
+    @ResponseStatus(HttpStatus.FORBIDDEN)
+    public ApiResult<Void> handleAccessDenied(AccessDeniedException e) {
+        log.warn("无权限访问: {}", e.getMessage());
+        return ApiResult.fail(403, "无权限访问");
     }
 
     // ==================== 运行时异常 ====================

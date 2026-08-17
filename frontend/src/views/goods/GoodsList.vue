@@ -72,9 +72,18 @@
         :pagination="pagination"
         @change="handleTableChange"
         row-key="id"
-        :scroll="{ x: 800 }"
+        :scroll="{ x: 1000 }"
       >
         <template #bodyCell="{ column, record }">
+          <template v-if="column.key === 'imageUrl'">
+            <img
+              v-if="record.imageUrl"
+              :src="record.imageUrl"
+              style="width:50px;height:50px;object-fit:cover;border-radius:4px;cursor:pointer"
+              @click.stop="previewImage(record.imageUrl)"
+            />
+            <span v-else class="text-hint">—</span>
+          </template>
           <template v-if="column.key === 'status'">
             <a-tag :color="record.status === 'on' ? 'green' : 'red'" size="small">
               {{ record.status === 'on' ? '上架' : '下架' }}
@@ -182,6 +191,32 @@
             <a-radio value="off">下架</a-radio>
           </a-radio-group>
         </a-form-item>
+        <a-form-item label="商品图片">
+          <div class="image-upload-area">
+            <div v-for="(img, idx) in imageList" :key="img.uid || idx" class="image-upload-item">
+              <img :src="img.url || img.imageUrl" class="image-upload-thumb" />
+              <div class="image-upload-actions">
+                <a-tag v-if="img.isPrimary" color="gold" style="margin-right:4px">主图</a-tag>
+                <a-button v-else size="small" type="link" @click="setPrimary(idx)">设为主图</a-button>
+                <a-popconfirm title="删除此图片？" @confirm="removeImage(idx)">
+                  <a-button size="small" type="link" danger>删除</a-button>
+                </a-popconfirm>
+              </div>
+            </div>
+            <a-upload
+              v-if="imageList.length < 8"
+              list-type="picture-card"
+              :show-upload-list="false"
+              :before-upload="beforeUpload"
+              :custom-request="handleUpload"
+            >
+              <div>
+                <PlusOutlined />
+                <div style="margin-top: 8px">上传</div>
+              </div>
+            </a-upload>
+          </div>
+        </a-form-item>
         <a-form-item label="商品描述" name="description">
           <a-textarea v-model:value="formData.description" :rows="3" placeholder="请输入商品描述" />
         </a-form-item>
@@ -190,9 +225,18 @@
     <a-modal v-model:open="detailVisible" title="详情" :footer="null" width="600px">
       <a-descriptions :column="2" bordered size="small">
         <a-descriptions-item v-for="(val, key) in detailRecord" :key="key" :label="String(key)" :span="typeof val === 'object' ? 2 : 1">
-          {{ typeof val === 'object' ? JSON.stringify(val) : val }}
+          <template v-if="key === 'imageUrl' && val">
+            <img :src="String(val)" style="max-width:200px;max-height:200px;cursor:pointer" @click="previewImage(String(val))" />
+          </template>
+          <template v-else>
+            {{ typeof val === 'object' ? JSON.stringify(val) : val }}
+          </template>
         </a-descriptions-item>
       </a-descriptions>
+    </a-modal>
+    <!-- 图片预览 -->
+    <a-modal v-model:open="previewVisible" title="商品图片" :footer="null" width="auto" centered>
+      <img :src="previewUrl" style="max-width:80vw;max-height:80vh" />
     </a-modal>
   </div>
 </template>
@@ -201,8 +245,11 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
 import { PlusOutlined } from '@ant-design/icons-vue'
-import type { GoodsItem, GoodsQueryParams, GoodsStatus } from '@/types/goods'
-import { goodsApi, brandApi, categoryApi, storeApi } from '@/api/goods'
+import { useCrudTable } from '@/composables/useCrudTable'
+import { useDetailModal } from '@/composables/useDetailModal'
+import type { GoodsItem, GoodsStatus } from '@/types/goods'
+import { goodsApi, brandApi, categoryApi, storeApi, fileApi, productImageApi } from '@/api/goods'
+import type { ProductImage } from '@/types/goods'
 import type { BrandItem, GoodsCategory, StoreItem } from '@/types/goods'
 
 // 搜索表单
@@ -213,24 +260,27 @@ const searchForm = reactive({
   status: undefined as GoodsStatus | undefined
 })
 
-// 表格数据
-const tableData = ref<GoodsItem[]>([])
-const loading = ref(false)
-const pagination = reactive({
-  current: 1,
-  pageSize: 10,
-  total: 0,
-  showSizeChanger: true,
-  showQuickJumper: true,
-  showTotal: (total: number) => `共 ${total} 条`
+// CRUD 表格逻辑
+const { tableData, loading, pagination, loadData, handleSearch, handleTableChange, handleDelete } = useCrudTable({
+  searchForm,
+  loadFn: (params) => goodsApi.getList(params),
+  deleteFn: (id) => goodsApi.delete(id),
+  onDeleteSuccess: () => message.success('删除成功'),
 })
+
+// 详情弹窗
+const { detailVisible, detailRecord, openDetail } = useDetailModal<GoodsItem>()
 
 // 表格列配置（成本价和毛利率按角色显示/隐藏）
 const columns = computed(() => {
   const baseColumns = [
-    { title: '商品编号', dataIndex: 'code', key: 'code', width: 160 },
-    { title: '商品名称', dataIndex: 'name', key: 'name', width: 160 },
+    { title: '商品编号', dataIndex: 'code', key: 'code', width: 140 },
+    {
+      title: '商品图片', dataIndex: 'imageUrl', key: 'imageUrl', width: 80, align: 'center' as const
+    },
+    { title: '商品名称', dataIndex: 'name', key: 'name', width: 140 },
     { title: '商品分类', dataIndex: 'categoryName', key: 'categoryName', width: 100 },
+    { title: '品牌', dataIndex: 'brandName', key: 'brandName', width: 100 },
     { title: '所属门店', dataIndex: 'storeName', key: 'storeName', width: 120 },
     { title: '售价(元)', dataIndex: 'price', key: 'price', width: 100, align: 'right' as const },
   ]
@@ -248,15 +298,11 @@ const columns = computed(() => {
     { title: '库存', dataIndex: 'stock', key: 'stock', width: 80, align: 'right' as const },
     { title: '状态', dataIndex: 'status', key: 'status', width: 80, align: 'right' as const },
     { title: '创建时间', dataIndex: 'createdAt', key: 'createdAt', width: 160 },
-    { title: '操作', key: 'action', width: 100 }
-  ) as any[]
+    { title: '操作', key: 'action', dataIndex: 'action', width: 100 }
+  )
 
   return baseColumns
 })
-
-// 详情弹窗
-const detailVisible = ref(false)
-const detailRecord = ref<any>(null)
 
 // 弹窗相关
 const modalVisible = ref(false)
@@ -276,6 +322,9 @@ const formData = reactive({
   status: 'on' as GoodsStatus,
   description: ''
 })
+
+// 图片列表（多图管理）
+const imageList = ref<(ProductImage & { uid?: string; url?: string; _new?: boolean })[]>([])
 
 const formRules = {
   name: [{ required: true, message: '请输入商品名称', trigger: 'blur' }],
@@ -302,28 +351,6 @@ const flattenCategories = (items: GoodsCategory[]): GoodsCategory[] => {
   }, [])
 }
 
-// 加载数据
-const loadData = async () => {
-  loading.value = true
-  try {
-    const params: GoodsQueryParams = {
-      keyword: searchForm.keyword || undefined,
-      categoryId: searchForm.categoryId,
-      storeId: searchForm.storeId,
-      status: searchForm.status,
-      page: pagination.current,
-      pageSize: pagination.pageSize
-    }
-    const res = await goodsApi.getList(params)
-    tableData.value = res.list
-    pagination.total = res.total
-  } catch (error) {
-    message.error('加载数据失败')
-  } finally {
-    loading.value = false
-  }
-}
-
 // 加载分类、品牌和门店
 const loadCategoriesAndBrands = async () => {
   try {
@@ -341,12 +368,6 @@ const loadCategoriesAndBrands = async () => {
   }
 }
 
-// 搜索
-const handleSearch = () => {
-  pagination.current = 1
-  loadData()
-}
-
 // 重置
 const handleReset = () => {
   searchForm.keyword = ''
@@ -356,11 +377,36 @@ const handleReset = () => {
   handleSearch()
 }
 
-// 表格分页
-const handleTableChange = (pag: any) => {
-  pagination.current = pag.current
-  pagination.pageSize = pag.pageSize
-  loadData()
+// 图片上传处理
+const beforeUpload = (file: File) => {
+  const isImage = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'].includes(file.type)
+  if (!isImage) { message.error('仅支持 JPG/PNG/WEBP/GIF'); return false }
+  if (file.size / 1024 / 1024 > 2) { message.error('图片不能超过 2MB'); return false }
+  return true
+}
+
+const handleUpload = async (options: any) => {
+  try {
+    const res = await fileApi.upload(options.file as File)
+    imageList.value.push({
+      id: '', productId: '', imageUrl: res.fileUrl,
+      sortOrder: imageList.value.length, isPrimary: imageList.value.length === 0 ? 1 : 0,
+      createdAt: '', uid: String(Date.now()), url: res.fileUrl, _new: true
+    })
+    options.onSuccess?.(res, options.file)
+  } catch { message.error('上传失败'); options.onError?.() }
+}
+
+const setPrimary = (idx: number) => {
+  imageList.value.forEach((img, i) => { img.isPrimary = i === idx ? 1 : 0 })
+}
+
+const removeImage = (idx: number) => {
+  imageList.value.splice(idx, 1)
+  // 如果删除的是主图，重新指定第一张为主图
+  if (imageList.value.length > 0 && !imageList.value.some(i => i.isPrimary)) {
+    imageList.value[0].isPrimary = 1
+  }
 }
 
 // 新增
@@ -373,12 +419,12 @@ const handleAdd = () => {
 // 编辑
 const handleEdit = (record: GoodsItem) => {
   isEdit.value = true
-  // 根据分类ID查找路径
-  const findCategoryPath = (items: GoodsCategory[], targetId: string): string[] => {
+  // 根据分类名称查找路径（后端返回 categoryName，无 categoryId）
+  const findCategoryPath = (items: GoodsCategory[], targetName: string): string[] => {
     for (const item of items) {
-      if (item.id === targetId) return [item.id]
+      if (item.name === targetName) return [item.id]
       if (item.children) {
-        const path = findCategoryPath(item.children, targetId)
+        const path = findCategoryPath(item.children, targetName)
         if (path.length) return [item.id, ...path]
       }
     }
@@ -387,33 +433,75 @@ const handleEdit = (record: GoodsItem) => {
 
   formData.id = record.id
   formData.name = record.name
-  formData.categoryId = findCategoryPath(categoryTree.value, record.categoryId)
-  formData.brandId = record.brandId
-  formData.price = record.retailPrice
-  formData.costPrice = record.costPrice
-  formData.grossMarginRate = record.grossMarginRate
-  formData.stock = record.stock
-  formData.storeId = record.storeId
-  formData.status = record.status
+  formData.categoryId = findCategoryPath(categoryTree.value, record.categoryName || '')
+  // 后端返回 brandName，根据名称匹配品牌ID
+  const matchedBrand = brands.value.find(b => b.name === record.brandName)
+  formData.brandId = matchedBrand?.id || ''
+  formData.price = record.price ?? record.retailPrice ?? 0
+  formData.costPrice = record.costPrice || 0
+  formData.grossMarginRate = record.grossMarginRate || 0
+  formData.stock = record.stock || 0
+  formData.storeId = record.storeId || ''
+  formData.status = record.status === 'on' ? 'on' : 'off'
   formData.description = record.description || ''
+  // 编辑时加载已有图片
+  loadProductImages(record.id)
   modalVisible.value = true
+}
+
+// 加载商品已有图片
+const loadProductImages = async (productId: string) => {
+  imageList.value = []
+  try {
+    const imgs = await productImageApi.list(productId)
+    imageList.value = imgs.map(img => ({ ...img, uid: img.id, url: img.imageUrl }))
+  } catch { /* skip */ }
+}
+
+// 保存商品图片
+const saveProductImages = async (productId: string) => {
+  if (!productId) return
+  // 删除旧的（不在当前列表中）
+  try {
+    const existing = await productImageApi.list(productId)
+    const keepIds = new Set(imageList.value.map(i => i.id).filter(Boolean))
+    for (const img of existing) {
+      if (!keepIds.has(img.id)) {
+        await productImageApi.delete(productId, img.id).catch(() => {})
+      }
+    }
+  } catch { /* skip */ }
+  // 新增/更新图片
+  for (let i = 0; i < imageList.value.length; i++) {
+    const img = imageList.value[i]
+    try {
+      if (img._new || !img.id) {
+        await productImageApi.create(productId, {
+          imageUrl: img.imageUrl,
+          sortOrder: i,
+          isPrimary: img.isPrimary
+        })
+      } else {
+        await productImageApi.update(productId, img.id, {
+          sortOrder: i,
+          isPrimary: img.isPrimary
+        })
+      }
+    } catch { /* skip */ }
+  }
+}
+
+// 图片预览
+const previewVisible = ref(false)
+const previewUrl = ref('')
+const previewImage = (url: string) => {
+  previewUrl.value = url
+  previewVisible.value = true
 }
 
 // 详情
 const handleDetail = (record: GoodsItem) => {
-  detailRecord.value = record
-  detailVisible.value = true
-}
-
-// 删除
-const handleDelete = async (id: string) => {
-  try {
-    await goodsApi.delete(id)
-    message.success('删除成功')
-    loadData()
-  } catch (error) {
-    message.error('删除失败')
-  }
+  openDetail(record)
 }
 
 // 弹窗确认
@@ -439,7 +527,7 @@ const handleModalOk = async () => {
       categoryName: getCategoryName(formData.categoryId),
       brandId: formData.brandId,
       brandName: brand?.name || '',
-      retailPrice: formData.price,
+      price: formData.price,
       costPrice: formData.costPrice,
       grossMarginRate: formData.grossMarginRate,
       stock: formData.stock,
@@ -451,9 +539,13 @@ const handleModalOk = async () => {
 
     if (isEdit.value) {
       await goodsApi.update(formData.id, submitData)
+      await saveProductImages(formData.id)
       message.success('更新成功')
     } else {
-      await goodsApi.create(submitData)
+      const created = await goodsApi.create(submitData)
+      if (created?.id) {
+        await saveProductImages(created.id)
+      }
       message.success('新增成功')
     }
 
@@ -477,8 +569,9 @@ const resetForm = () => {
   formData.grossMarginRate = 0
   formData.stock = 0
   formData.storeId = ''
-  formData.status = 'ON_SALE'
+  formData.status = 'on'
   formData.description = ''
+  imageList.value = []
 }
 
 onMounted(() => {
@@ -606,5 +699,36 @@ onMounted(() => {
     font-size: 12px;
     min-width: 500px;
   }
+}
+
+/* 商品图片上传区域 */
+.image-upload-area {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.image-upload-item {
+  position: relative;
+  width: 102px;
+  height: 102px;
+  border: 1px solid #d9d9d9;
+  border-radius: 6px;
+  overflow: hidden;
+}
+.image-upload-thumb {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.image-upload-actions {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: rgba(0,0,0,0.6);
+  padding: 2px 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 </style>

@@ -1,5 +1,13 @@
 # 开发环境配置 — 含所有敏感字段默认值，仅用于本地开发
 spring:
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration
+      - org.springframework.boot.autoconfigure.data.redis.RedisRepositoriesAutoConfiguration
+
+  flyway:
+    enabled: false  # dev: skip Flyway (DB schema already exists, V30残留记录)
+
   datasource:
     url: jdbc:mysql://localhost:3306/zb_tong_dev?useUnicode=true&characterEncoding=utf-8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
     username: ${DB_USERNAME:root}
@@ -17,6 +25,9 @@ jwt:
 # MinIO 存储 (dev 默认)
 file:
   storage:
+    type: local
+    local:
+      path: ${user.dir}/data/files
     minio:
       access-key: ${MINIO_ACCESS_KEY:minioadmin}
       secret-key: ${MINIO_SECRET_KEY:minioadmin}
@@ -30,6 +41,19 @@ xxl:
 ai:
   openai:
     api-key: ${OPENAI_API_KEY:sk-your-key}
+
+  # DevTools 热更新配置
+  devtools:
+    restart:
+      enabled: true                    # 开启自动重启
+      additional-paths: src/main/java  # 额外监控的源码路径
+      trigger-file: target/classes/.restart   # 触发文件：touch 此文件即可强制热重启（兼容 Windows）
+      exclude:                         # 不触发重启的目录
+        - static/**
+        - public/**
+        - META-INF/**
+    livereload:
+      enabled: false                   # 前后端分离项目关闭前端 LiveReload
 
 logging:
   level:

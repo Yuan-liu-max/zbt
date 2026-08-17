@@ -12,14 +12,12 @@
           v-model:value="dateRange"
           style="width: 260px"
         />
-        <a-select v-model:value="storeId" placeholder="全部门店" allow-clear style="width: 150px">
-          <a-select-option value="1">深圳总店</a-select-option>
-          <a-select-option value="2">北京旗舰店</a-select-option>
-          <a-select-option value="3">上海中心店</a-select-option>
+        <a-select v-model:value="storeId" placeholder="全部门店" allow-clear style="width: 150px" :loading="storeLoading">
+          <a-select-option v-for="s in storeOptions" :key="s.id" :value="String(s.id)">{{ s.name }}</a-select-option>
         </a-select>
       </div>
-      <a-button type="primary" @click="handleExport">
-        <DownloadOutlined /> 导出报表
+      <a-button type="primary" disabled @click="handleExport">
+        <DownloadOutlined /> 导出报表（开发中）
       </a-button>
     </div>
 
@@ -73,7 +71,6 @@
       <div class="content-card chart-card">
         <div class="chart-header">
           <span class="chart-title">销售趋势</span>
-          <a-segmented :options="['按天', '按周', '按月']" size="small" />
         </div>
         <div class="chart-legend">
           <span class="legend-item"><span class="legend-dot" style="background:#1890ff" /> 销售额（元）</span>
@@ -99,18 +96,16 @@
           <!-- 简化的饼图展示 -->
           <div class="simple-pie">
             <svg viewBox="0 0 100 100" class="pie-svg">
-              <circle cx="50" cy="50" r="40" fill="transparent" stroke="#1890ff" stroke-width="20"
-                :stroke-dasharray="`${42.5 * 2.513} ${251.3 - 42.5 * 2.513}`"
-                stroke-dashoffset="0" />
-              <circle cx="50" cy="50" r="40" fill="transparent" stroke="#52c41a" stroke-width="20"
-                :stroke-dasharray="`${28.7 * 2.513} ${251.3 - 28.7 * 2.513}`"
-                :stroke-dashoffset="`${-42.5 * 2.513}`" />
-              <circle cx="50" cy="50" r="40" fill="transparent" stroke="#faad14" stroke-width="20"
-                :stroke-dasharray="`${16.4 * 2.513} ${251.3 - 16.4 * 2.513}`"
-                :stroke-dashoffset="`${-(42.5 + 28.7) * 2.513}`" />
-              <circle cx="50" cy="50" r="40" fill="transparent" stroke="#722ed1" stroke-width="20"
-                :stroke-dasharray="`${12.4 * 2.513} ${251.3 - 12.4 * 2.513}`"
-                :stroke-dashoffset="`${-(42.5 + 28.7 + 16.4) * 2.513}`" />
+              <circle
+                v-for="(item, index) in pieSlices"
+                :key="index"
+                cx="50" cy="50" r="40"
+                fill="transparent"
+                :stroke="item.color"
+                stroke-width="20"
+                :stroke-dasharray="item.dashArray"
+                :stroke-dashoffset="item.dashOffset"
+              />
             </svg>
           </div>
           <div class="pie-legend">
@@ -128,7 +123,7 @@
     <div class="content-card">
       <div class="ranking-header">
         <span class="section-title">销售排行榜</span>
-        <a-tabs v-model:activeKey="rankingTab" size="small">
+        <a-tabs v-model:activeKey="rankingTab" size="small" @change="onRankingTabChange">
           <a-tab-pane key="product" tab="商品排行" />
           <a-tab-pane key="store" tab="门店排行" />
           <a-tab-pane key="employee" tab="销售员排行" />
@@ -149,31 +144,50 @@
             <span class="amount">¥{{ record.salesAmount.toLocaleString() }}</span>
           </template>
           <template v-if="column.key === 'action'">
-            <a class="action-link">查看明细</a>
+            <a class="action-link" @click="handleViewDetail(record)">查看明细</a>
           </template>
         </template>
       </a-table>
     </div>
+
+    <!-- 排行明细弹窗 -->
+    <a-modal v-model:open="detailVisible" title="排行明细" :footer="null" width="560px">
+      <a-descriptions :column="2" bordered size="small" v-if="detailRecord">
+        <a-descriptions-item label="排名">
+          <span class="rank-badge" :class="'rank-' + detailRecord.rank">{{ detailRecord.rank }}</span>
+        </a-descriptions-item>
+        <a-descriptions-item label="商品名称">{{ detailRecord.name }}</a-descriptions-item>
+        <a-descriptions-item label="商品编码">{{ detailRecord.code }}</a-descriptions-item>
+        <a-descriptions-item label="销售数量">{{ detailRecord.quantity }}</a-descriptions-item>
+        <a-descriptions-item label="销售额（元）">
+          <span class="amount">¥{{ detailRecord.salesAmount.toLocaleString() }}</span>
+        </a-descriptions-item>
+        <a-descriptions-item label="占比">{{ detailRecord.percentage }}%</a-descriptions-item>
+      </a-descriptions>
+    </a-modal>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
-import { message } from 'ant-design-vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import {
   DownloadOutlined, BarChartOutlined, FileTextOutlined, TeamOutlined,
   TransactionOutlined, RiseOutlined
 } from '@ant-design/icons-vue'
+import type { Dayjs } from 'dayjs'
 import type { ReportStats, SalesTrend, ChannelStats, RankingItem } from '@/types/report'
 import { reportApi } from '@/api/report'
-import { exportReportScores } from '@/utils/export'
+import { storeApi } from '@/api/store'
 
 // 标签页
 const rankingTab = ref('product')
-const trendType = ref('按天')
+
+// 排行明细弹窗
+const detailVisible = ref(false)
+const detailRecord = ref<RankingItem | null>(null)
 
 // 筛选条件
-const dateRange = ref<any>(null)
+const dateRange = ref<Dayjs[] | null>(null)
 const storeId = ref<string | undefined>(undefined)
 
 // 统计数据
@@ -186,6 +200,33 @@ const salesTrend = ref<SalesTrend[]>([])
 const channelStats = ref<ChannelStats[]>([])
 const productRanking = ref<RankingItem[]>([])
 
+// 门店下拉动态加载
+const storeLoading = ref(false)
+const storeOptions = ref<{ id: number; name: string }[]>([])
+
+const loadStores = async () => {
+  storeLoading.value = true
+  try {
+    const stores = await storeApi.getAll()
+    storeOptions.value = stores.map((s: any) => ({ id: Number(s.id), name: s.storeName || s.name }))
+  } catch { storeOptions.value = [] }
+  finally { storeLoading.value = false }
+}
+
+// 饼图动态计算（从 channelStats 计算每个扇区的 stroke-dasharray）
+const CIRCUMFERENCE = 2 * Math.PI * 40 // ≈ 251.33
+const pieSlices = computed(() => {
+  let offset = 0
+  return channelStats.value.map((item) => {
+    const pct = Number(item.percentage) || 0
+    const dashLen = (pct / 100) * CIRCUMFERENCE
+    const dashArray = `${dashLen} ${CIRCUMFERENCE - dashLen}`
+    const dashOffset = -offset
+    offset += dashLen
+    return { color: item.color, dashArray, dashOffset }
+  })
+})
+
 // 排行榜列配置
 const rankingColumns = [
   { title: '排名', dataIndex: 'rank', key: 'rank', width: 70, align: 'center' as const },
@@ -197,36 +238,69 @@ const rankingColumns = [
   { title: '操作', key: 'action', width: 100, align: 'center' as const },
 ]
 
-// 获取柱状图高度
+// 获取柱状图高度（防止空数组崩溃）
 const getBarHeight = (value: number) => {
-  const max = Math.max(...salesTrend.value.map(item => item.salesAmount))
-  return (value / max) * 100
+  const amounts = salesTrend.value.map(item => item.salesAmount)
+  if (amounts.length === 0) return 0
+  const max = Math.max(...amounts, 1)
+  return max > 0 ? (value / max) * 100 : 0
+}
+
+// 查看排行明细
+const handleViewDetail = (record: RankingItem) => {
+  detailRecord.value = record
+  detailVisible.value = true
+}
+
+// 排名 Tab 切换时重新加载
+const onRankingTabChange = async (key: string) => {
+  try {
+    const month = dateRange.value?.[0]?.format?.('YYYY-MM')
+    const data = await reportApi.getRanking(key, month || undefined)
+    if (data) productRanking.value = data
+  } catch { productRanking.value = [] }
 }
 
 // 导出
 const handleExport = async () => {
-  // 获取当前选中的月份，默认当月
-  const now = new Date()
-  const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
-  await exportReportScores(month)
+  // 导出功能暂不可用
 }
 
 // 加载数据
 const loadData = async () => {
   try {
+    const params: any = {}
+    if (dateRange.value?.[0]) params.startDate = dateRange.value[0].format('YYYY-MM-DD')
+    if (dateRange.value?.[1]) params.endDate = dateRange.value[1].format('YYYY-MM-DD')
+    if (storeId.value) params.storeId = storeId.value
+
     const dashboard: any = await reportApi.getDashboard()
     if (dashboard) {
-      if (dashboard.kpis) Object.assign(reportStats, dashboard.kpis)
+      if (dashboard.kpis) {
+        // 后端返回 BigDecimal，前端需要转 number
+        const k = dashboard.kpis
+        reportStats.totalSales = Number(k.totalSales) || 0
+        reportStats.totalOrders = Number(k.totalOrders) || 0
+        reportStats.totalCustomers = Number(k.totalCustomers) || 0
+        reportStats.avgOrderAmount = Number(k.avgOrderAmount) || 0
+        reportStats.grossProfit = Number(k.grossProfit) || 0
+        reportStats.salesChange = Number(k.salesChange) || 0
+        reportStats.ordersChange = Number(k.ordersChange) || 0
+        reportStats.customersChange = Number(k.customersChange) || 0
+        reportStats.avgOrderChange = Number(k.avgOrderChange) || 0
+        reportStats.profitChange = Number(k.profitChange) || 0
+      }
       if (dashboard.salesTrend) salesTrend.value = dashboard.salesTrend
       if (dashboard.channelStats) channelStats.value = dashboard.channelStats
       if (dashboard.ranking) productRanking.value = dashboard.ranking
     }
   } catch {
-    console.warn('加载 dashboard 数据失败，使用默认数据')
+    console.warn('加载 dashboard 数据失败')
   }
 }
 
 onMounted(() => {
+  loadStores()
   loadData()
 })
 </script>
@@ -483,6 +557,10 @@ onMounted(() => {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 16px;
+}
+
+.ranking-header :deep(.ant-tabs-nav-more) {
+  display: none;
 }
 
 .section-title {

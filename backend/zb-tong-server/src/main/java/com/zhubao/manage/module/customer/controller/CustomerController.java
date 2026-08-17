@@ -1,6 +1,7 @@
 package com.zhubao.manage.module.customer.controller;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.zhubao.manage.common.annotation.OperateLog;
 import com.zhubao.manage.common.dto.ApiResult;
 import com.zhubao.manage.common.dto.PageDTO;
 import com.zhubao.manage.common.dto.PageResult;
@@ -42,12 +43,15 @@ public class CustomerController {
     @ApiOperation("客户详情") @GetMapping("/customers/{id}")
     public ApiResult<Customer> getCustomer(@PathVariable Long id) { return ApiResult.ok(customerService.detail(id)); }
 
+    @OperateLog(module = "客户管理", action = "CREATE", targetType = "CUSTOMER")
     @ApiOperation("新增客户") @PostMapping("/customers")
     public ApiResult<Customer> createCustomer(@Valid @RequestBody Customer c) { return ApiResult.ok(customerService.create(c)); }
 
+    @OperateLog(module = "客户管理", action = "UPDATE", targetType = "CUSTOMER", targetIdExpr = "#id")
     @ApiOperation("更新客户") @PutMapping("/customers/{id}")
     public ApiResult<Customer> updateCustomer(@PathVariable Long id, @Valid @RequestBody Customer c) { return ApiResult.ok(customerService.update(id, c)); }
 
+    @OperateLog(module = "客户管理", action = "DELETE", targetType = "CUSTOMER", targetIdExpr = "#id")
     @ApiOperation("删除客户") @DeleteMapping("/customers/{id}")
     public ApiResult<Void> deleteCustomer(@PathVariable Long id) { customerService.delete(id); return ApiResult.ok(); }
 
@@ -68,9 +72,11 @@ public class CustomerController {
     @GetMapping("/member-levels/stats")
     public ApiResult<Map<String, Object>> levelStats() { return ApiResult.ok(customerService.levelStats()); }
 
+    @OperateLog(module = "客户管理", action = "CREATE", targetType = "MEMBER_LEVEL")
     @ApiOperation("新增会员等级") @PostMapping("/member-levels")
     public ApiResult<MemberLevel> createLevel(@Valid @RequestBody MemberLevel ml) { return ApiResult.ok(customerService.createLevel(ml)); }
 
+    @OperateLog(module = "客户管理", action = "UPDATE", targetType = "MEMBER_LEVEL", targetIdExpr = "#id")
     @ApiOperation("更新会员等级") @PutMapping("/member-levels/{id}")
     public ApiResult<MemberLevel> updateLevel(@PathVariable Long id, @Valid @RequestBody MemberLevel ml) { return ApiResult.ok(customerService.updateLevel(id, ml)); }
 }

@@ -34,34 +34,34 @@ public class FinanceService {
 
     public Transaction detail(Long id) { return mapper.selectById(id); }
 
-    @Transactional public Transaction create(Transaction t) { mapper.insert(t); return t; }
+    @Transactional public Transaction create(Transaction t) {
+        t.setCode("TXN" + System.currentTimeMillis());
+        mapper.insert(t);
+        return t;
+    }
 
     @Transactional public Transaction update(Long id, Transaction t) { t.setId(id); mapper.updateById(t); return detail(id); }
 
     @Transactional public void delete(Long id) { mapper.deleteById(id); }
 
-    /** 汇总统计 */
+    /** 汇总统计 — SELECT SUM(amount) WHERE type='income' / 'expense' */
     public Map<String, Object> stats() {
-        List<Transaction> all = mapper.selectList(null);
-        BigDecimal totalIncome = BigDecimal.ZERO;
-        BigDecimal totalExpense = BigDecimal.ZERO;
-        for (Transaction t : all) {
-            if (t.getAmount() == null) continue;
-            if ("income".equals(t.getType())) totalIncome = totalIncome.add(t.getAmount());
-            else if ("expense".equals(t.getType())) totalExpense = totalExpense.add(t.getAmount());
-        }
-        BigDecimal netProfit = totalIncome.subtract(totalExpense);
+        Map<String, Object> incomeRow = mapper.selectMaps(
+                new com.baomidou.mybatisplus.core.conditions.query.QueryWrapper<Transaction>()
+                        .select("IFNULL(SUM(amount),0) AS income").eq("type", "income")).stream()
+                .findFirst().orElse(new java.util.HashMap<>());
+        Map<String, Object> expenseRow = mapper.selectMaps(
+                new com.baomidou.mybatisplus.core.conditions.query.QueryWrapper<Transaction>()
+                        .select("IFNULL(SUM(amount),0) AS expense").eq("type", "expense")).stream()
+                .findFirst().orElse(new java.util.HashMap<>());
+        BigDecimal totalIncome = incomeRow.get("income") instanceof BigDecimal
+                ? (BigDecimal) incomeRow.get("income") : BigDecimal.ZERO;
+        BigDecimal totalExpense = expenseRow.get("expense") instanceof BigDecimal
+                ? (BigDecimal) expenseRow.get("expense") : BigDecimal.ZERO;
         Map<String, Object> s = new LinkedHashMap<>();
         s.put("totalIncome", totalIncome);
         s.put("totalExpense", totalExpense);
-        s.put("netProfit", netProfit);
-        s.put("receivable", BigDecimal.ZERO);          // TODO: 应收应付模块实现后对接
-        s.put("payable", BigDecimal.ZERO);
-        s.put("incomeChange", BigDecimal.ZERO);        // TODO: 环比数据待实现
-        s.put("expenseChange", BigDecimal.ZERO);
-        s.put("profitChange", BigDecimal.ZERO);
-        s.put("receivableChange", BigDecimal.ZERO);
-        s.put("payableChange", BigDecimal.ZERO);
+        s.put("netProfit", totalIncome.subtract(totalExpense));
         return s;
     }
 }

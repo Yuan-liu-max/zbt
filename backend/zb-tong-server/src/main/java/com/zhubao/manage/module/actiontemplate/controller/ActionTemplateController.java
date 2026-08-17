@@ -1,5 +1,6 @@
 package com.zhubao.manage.module.actiontemplate.controller;
 
+import com.zhubao.manage.common.annotation.OperateLog;
 import com.zhubao.manage.common.dto.ApiResult;
 import com.zhubao.manage.module.actiontemplate.dto.DispatchToStoresDTO;
 import com.zhubao.manage.module.actiontemplate.entity.ActionTemplate;
@@ -36,18 +37,21 @@ public class ActionTemplateController {
         return ApiResult.ok(actionTemplateService.detail(id));
     }
 
+    @OperateLog(module = "动作库", action = "CREATE", targetType = "ACTION_TEMPLATE")
     @ApiOperation("新增动作")
     @PostMapping
     public ApiResult<ActionTemplate> create(@RequestBody ActionTemplate entity) {
         return ApiResult.ok(actionTemplateService.create(entity));
     }
 
+    @OperateLog(module = "动作库", action = "UPDATE", targetType = "ACTION_TEMPLATE", targetIdExpr = "#id")
     @ApiOperation("更新动作")
     @PutMapping("/{id}")
     public ApiResult<ActionTemplate> update(@PathVariable Long id, @RequestBody ActionTemplate entity) {
         return ApiResult.ok(actionTemplateService.update(id, entity));
     }
 
+    @OperateLog(module = "动作库", action = "DELETE", targetType = "ACTION_TEMPLATE", targetIdExpr = "#id")
     @ApiOperation("删除动作")
     @DeleteMapping("/{id}")
     public ApiResult<Void> delete(@PathVariable Long id) {
@@ -55,6 +59,7 @@ public class ActionTemplateController {
         return ApiResult.ok();
     }
 
+    @OperateLog(module = "动作库", action = "UPDATE", targetType = "ACTION_TEMPLATE", targetIdExpr = "#id")
     @ApiOperation("启停动作")
     @PutMapping("/{id}/toggle")
     public ApiResult<Void> toggle(@PathVariable Long id) {
@@ -62,6 +67,7 @@ public class ActionTemplateController {
         return ApiResult.ok();
     }
 
+    @OperateLog(module = "动作库", action = "DISPATCH", targetType = "ACTION_TEMPLATE")
     @ApiOperation("一键下发到门店")
     @PostMapping("/dispatch")
     public ApiResult<List<TaskInstance>> dispatch(@Valid @RequestBody DispatchToStoresDTO dto) {

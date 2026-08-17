@@ -44,6 +44,18 @@
               <span class="info-label">配送方式</span>
               <span class="info-value">{{ order.deliveryMethod }}</span>
             </div>
+            <div class="info-item" v-if="order.deliveryCompany">
+              <span class="info-label">物流公司</span>
+              <span class="info-value">{{ order.deliveryCompany }}</span>
+            </div>
+            <div class="info-item" v-if="order.deliveryTrackNo">
+              <span class="info-label">运单号</span>
+              <span class="info-value">{{ order.deliveryTrackNo }}</span>
+            </div>
+            <div class="info-item" v-if="order.deliveryTime">
+              <span class="info-label">发货时间</span>
+              <span class="info-value">{{ order.deliveryTime }}</span>
+            </div>
             <div class="info-item full-width">
               <span class="info-label">买家留言</span>
               <span class="info-value">{{ order.remark || '无' }}</span>
@@ -119,12 +131,55 @@
         </div>
 
         <!-- 底部操作 -->
-        <div class="detail-footer" v-if="order.orderStatus === 'pending'">
+        <div class="detail-footer" v-if="isPending()">
           <a-space>
-            <a-button @click="handleBack">取消订单</a-button>
+            <a-button @click="handleCancel">取消订单</a-button>
             <a-button type="primary" @click="handlePay">立即付款</a-button>
           </a-space>
         </div>
+        <div class="detail-footer" v-if="isPaid()">
+          <a-space>
+            <a-button type="primary" @click="showShipModal = true">发货</a-button>
+          </a-space>
+        </div>
+        <div class="detail-footer" v-if="isRefund()">
+          <a-space>
+            <a-button @click="goToReturn">处理退款</a-button>
+          </a-space>
+        </div>
+
+        <!-- 发货弹窗 -->
+        <a-modal
+          v-model:open="showShipModal"
+          title="订单发货"
+          :confirm-loading="shipLoading"
+          @ok="handleShip"
+        >
+          <a-form layout="vertical">
+            <a-form-item label="物流公司" required>
+              <a-select
+                v-model:value="shipForm.deliveryCompany"
+                placeholder="请选择物流公司"
+                allow-clear
+              >
+                <a-select-option value="顺丰速运">顺丰速运</a-select-option>
+                <a-select-option value="中通快递">中通快递</a-select-option>
+                <a-select-option value="圆通速递">圆通速递</a-select-option>
+                <a-select-option value="韵达快递">韵达快递</a-select-option>
+                <a-select-option value="申通快递">申通快递</a-select-option>
+                <a-select-option value="京东物流">京东物流</a-select-option>
+                <a-select-option value="EMS">EMS</a-select-option>
+                <a-select-option value="其他">其他</a-select-option>
+              </a-select>
+            </a-form-item>
+            <a-form-item label="运单号" required>
+              <a-input
+                v-model:value="shipForm.deliveryTrackNo"
+                placeholder="请输入快递运单号"
+              />
+            </a-form-item>
+          </a-form>
+        </a-modal>
       </div>
 
       <div v-else-if="!loading" class="empty-state">
@@ -135,69 +190,142 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import { useRouter, useRoute } from 'vue-router'
-import { message } from 'ant-design-vue'
+import { ref, reactive, onMounted } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { message, Modal } from 'ant-design-vue'
 import type { OrderRecord, OrderStatus, PaymentStatus } from '@/types/order'
 import { orderApi, orderStatusMap } from '@/api/order'
 
-const router = useRouter()
 const route = useRoute()
+const router = useRouter()
 
 const order = ref<OrderRecord | null>(null)
 const loading = ref(false)
 
-// 状态颜色
-const getOrderStatusColor = (status: OrderStatus) => {
-  return orderStatusMap[status]?.color || 'default'
+// 状态颜色（后端存在 PENDING/cancelled 等大小写混用，统一转小写匹配）
+const getOrderStatusColor = (status: OrderStatus | string) => {
+  const key = String(status || '').toLowerCase() as OrderStatus
+  return orderStatusMap[key]?.color || 'default'
 }
 
-const getOrderStatusText = (status: OrderStatus) => {
-  return orderStatusMap[status]?.text || status
+const getOrderStatusText = (status: OrderStatus | string) => {
+  const key = String(status || '').toLowerCase() as OrderStatus
+  return orderStatusMap[key]?.text || status
 }
 
-// 支付状态
-const getPaymentStatusColor = (status: PaymentStatus) => {
-  const map: Record<PaymentStatus, string> = {
+// 支付状态（后端创建订单时默认 UNPAID 大写，转小写匹配）
+const getPaymentStatusColor = (status: PaymentStatus | string) => {
+  const map: Record<string, string> = {
     unpaid: 'orange',
     paid: 'green',
     refunded: 'red'
   }
-  return map[status] || 'default'
+  return map[String(status || '').toLowerCase()] || 'default'
 }
 
-const getPaymentStatusText = (status: PaymentStatus) => {
-  const map: Record<PaymentStatus, string> = {
+const getPaymentStatusText = (status: PaymentStatus | string) => {
+  const map: Record<string, string> = {
     unpaid: '未支付',
     paid: '已支付',
     refunded: '已退款'
   }
-  return map[status] || status
+  return map[String(status || '').toLowerCase()] || status
 }
 
-// 加载数据
+// 加载数据（id 非数字时视为 orderCode，先查列表找到订单 id）
 const loadData = async () => {
-  const id = route.params.id as string
-  if (!id) return
+  const param = route.params.id as string
+  if (!param) return
 
   loading.value = true
   try {
+    let id = param
+    if (!/^\d+$/.test(param)) {
+      const res = await orderApi.getList({ keyword: param, page: 1, pageSize: 10 })
+      const match = res.list.find(o => o.orderCode === param)
+      if (!match) {
+        message.warning('未找到该订单')
+        return
+      }
+      id = match.id
+    }
     order.value = await orderApi.getById(id)
   } catch (error) {
-    message.error('加载数据失败')
+    console.error('加载数据失败', error)
   } finally {
     loading.value = false
   }
 }
 
-// 返回
-const handleBack = () => {
-  router.back()
+// 是否待付款（兼容 PENDING/pending 大小写）
+const isPending = () => !!order.value && String(order.value.orderStatus).toLowerCase() === 'pending'
+
+// 是否待发货
+const isPaid = () => !!order.value && String(order.value.orderStatus).toLowerCase() === 'paid'
+
+// 是否退款/售后状态
+const isRefund = () => !!order.value && String(order.value.orderStatus).toLowerCase() === 'refund'
+
+// 发货相关
+const showShipModal = ref(false)
+const shipLoading = ref(false)
+const shipForm = reactive({
+  deliveryCompany: '',
+  deliveryTrackNo: '',
+})
+
+const handleShip = async () => {
+  if (!shipForm.deliveryCompany || !shipForm.deliveryTrackNo) {
+    message.warning('请填写物流公司和运单号')
+    return
+  }
+  if (!order.value) return
+  shipLoading.value = true
+  try {
+    await orderApi.ship(order.value.id, {
+      deliveryCompany: shipForm.deliveryCompany,
+      deliveryTrackNo: shipForm.deliveryTrackNo,
+    })
+    message.success('发货成功')
+    showShipModal.value = false
+    await loadData()
+  } catch (error) {
+    console.error('发货失败', error)
+    message.error('发货失败')
+  } finally {
+    shipLoading.value = false
+  }
 }
 
-// 付款
+// 取消订单
+const handleCancel = () => {
+  if (!order.value) return
+  Modal.confirm({
+    title: '确认取消订单',
+    content: '确定要取消该订单吗？',
+    okText: '确认取消',
+    cancelText: '再想想',
+    onOk: async () => {
+      try {
+        await orderApi.cancel(order.value!.id)
+        message.success('订单已取消')
+        await loadData()
+      } catch (error) {
+        console.error('取消失败', error)
+        message.error('取消失败')
+      }
+    },
+  })
+}
+
+// 付款（后端暂无支付接口，保留占位提示）
 const handlePay = () => {
   message.info('跳转到支付页面...')
+}
+
+// 跳转退换货管理
+const goToReturn = () => {
+  router.push('/order/return')
 }
 
 onMounted(() => {

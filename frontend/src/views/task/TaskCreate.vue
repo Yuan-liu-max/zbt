@@ -64,8 +64,8 @@
               :filter-option="filterOption"
               allow-clear
             >
-              <a-select-option v-for="person in personOptions" :key="person" :value="person">
-                {{ person }}
+              <a-select-option v-for="p in personOptions" :key="p.value" :value="p.value">
+                {{ p.label }}
               </a-select-option>
             </a-select>
           </a-form-item>
@@ -81,8 +81,8 @@
               allow-clear
               :max-tag-count="isMobileScreen ? 1 : 3"
             >
-              <a-select-option v-for="person in personOptions" :key="person" :value="person">
-                {{ person }}
+              <a-select-option v-for="p in personOptions" :key="p.value" :value="p.value">
+                {{ p.label }}
               </a-select-option>
             </a-select>
           </a-form-item>
@@ -152,7 +152,6 @@
           <a-upload
             v-model:file-list="formData.attachments"
             action="/api/files/upload"
-            :headers="{ Authorization: `Bearer ${localStorage.getItem('token')}` }"
             :before-upload="beforeUpload"
             :max-count="10"
             :multiple="true"
@@ -182,12 +181,13 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted, onUnmounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { message } from 'ant-design-vue'
 import { UploadOutlined } from '@ant-design/icons-vue'
 import type { FormInstance } from 'ant-design-vue'
-import type { TaskItem, TaskDimension, TaskPriority } from '@/types/task'
-import { taskApi } from '@/api/task'
+import type { TaskDimension, TaskPriority } from '@/types/task'
+import { taskApi, templateApi } from '@/api/task'
+import { userApi } from '@/api/system'
 
 // 本地映射表
 const taskTypeMap: Record<string, string> = { HUMAN: '人效', PRODUCT: '货品', SCENE: '场景', COMPREHENSIVE: '综合' }
@@ -199,36 +199,7 @@ const priorityMap: Record<string, { text: string; color: string }> = {
 }
 
 const router = useRouter()
-const formRef = ref()
-const submitting = ref(false)
-
-/* ---------- 响应式 ---------- */
-const isMobileScreen = ref(false)
-const checkScreen = () => {
-  isMobileScreen.value = window.innerWidth < 768
-}
-
-onMounted(() => {
-  checkScreen()
-  window.addEventListener('resize', checkScreen)
-})
-
-onUnmounted(() => {
-  window.removeEventListener('resize', checkScreen)
-})
-
-/* ---------- 下拉选项 ---------- */
-const taskTypeOptions = Object.entries(taskTypeMap).map(([value, label]) => ({
-  value: value,
-  label,
-}))
-
-const priorityOptions = Object.entries(priorityMap).map(([value, info]) => ({
-  value: value,
-  label: info.text,
-}))
-
-const router = useRouter()
+const route = useRoute()
 const formRef = ref<FormInstance>()
 const submitting = ref(false)
 
@@ -241,6 +212,22 @@ const checkScreen = () => {
 onMounted(() => {
   checkScreen()
   window.addEventListener('resize', checkScreen)
+  loadUsers()
+
+  // URL 携带 templateId（从任务模板「使用」跳转）：预填模板信息
+  const templateId = route.query.templateId
+  if (templateId) {
+    templateApi
+      .getDetail(String(templateId))
+      .then((tpl) => {
+        formData.templateId = Number(templateId)
+        formData.name = tpl.templateName || ''
+        if (tpl.dimension) formData.type = tpl.dimension
+      })
+      .catch((error) => {
+        console.error('加载任务模板失败', error)
+      })
+  }
 })
 
 onUnmounted(() => {
@@ -258,16 +245,35 @@ const priorityOptions = Object.entries(priorityMap).map(([value, info]) => ({
   label: info.text,
 }))
 
-const personOptions = ['张三', '李四', '王五', '赵六', '钱七', '孙八']
+// 负责人下拉：真实用户列表（GET /users）
+interface UserOption {
+  value: string
+  label: string
+}
+const personOptions = ref<UserOption[]>([])
+const loadUsers = async () => {
+  try {
+    const res = await userApi.getList({ page: 1, pageSize: 999 })
+    personOptions.value = (res.list || []).map((u) => ({
+      value: String(u.id),
+      label: u.realName || u.username,
+    }))
+  } catch (error) {
+    console.error('加载用户列表失败', error)
+  }
+}
 
 const filterOption = (input: string, option: any) => {
-  return option.value.toLowerCase().includes(input.toLowerCase())
+  return (
+    String(option?.label || '').toLowerCase().includes(input.toLowerCase()) ||
+    String(option?.value || '').toLowerCase().includes(input.toLowerCase())
+  )
 }
 
 /* ---------- 表单数据 ---------- */
 interface FormData {
   name: string
-  type: TaskType | undefined
+  type: TaskDimension | undefined
   priority: TaskPriority | undefined
   assignee: string | undefined
   participants: string[]
@@ -276,6 +282,7 @@ interface FormData {
   description: string
   remindDays: number
   attachments: any[]
+  templateId?: number
 }
 
 const formData = reactive<FormData>({
@@ -289,6 +296,7 @@ const formData = reactive<FormData>({
   description: '',
   remindDays: 3,
   attachments: [],
+  templateId: undefined,
 })
 
 /* ---------- 校验规则 ---------- */
@@ -306,7 +314,7 @@ const formRules = {
     { required: true, message: '请选择负责人', trigger: 'change' },
   ],
   participants: [
-    { required: true, message: '请选择参与人', trigger: 'change', type: 'array' as const },
+    { required: false, trigger: 'change', type: 'array' as const },
   ],
   startTime: [
     { required: true, message: '请选择开始时间', trigger: 'change' },
@@ -358,22 +366,23 @@ const handleSubmit = async () => {
 
   submitting.value = true
   try {
-    const params: Partial<TaskItem> = {
-      name: formData.name,
-      type: formData.type!,
+    const params: any = {
+      taskTitle: formData.name,
+      dimension: formData.type!,
       priority: formData.priority!,
-      assignee: formData.assignee!,
-      participants: formData.participants,
-      startTime: formData.startTime ? formData.startTime.format('YYYY-MM-DD HH:mm') : '',
-      endTime: formData.endTime ? formData.endTime.format('YYYY-MM-DD HH:mm') : '',
-      description: formData.description,
+      assigneeId: formData.assignee ? Number(formData.assignee) : undefined,
+      category: formData.description,
+      sourceType: 'MANUAL',
+      templateId: formData.templateId,
     }
+    if (formData.startTime) params.startTime = formData.startTime.format('YYYY-MM-DD HH:mm:ss')
+    if (formData.endTime) params.dueTime = formData.endTime.format('YYYY-MM-DD HH:mm:ss')
 
     await taskApi.create(params)
     message.success('任务创建成功')
     router.push('/task')
-  } catch (err) {
-    message.error('创建失败，请稍后重试')
+  } catch (err: any) {
+    message.error(err?.message || '创建失败，请稍后重试')
   } finally {
     submitting.value = false
   }

@@ -13,7 +13,7 @@ public class SalesCreateDTO {
     private String orderNo;
     @NotNull private BigDecimal totalAmount;
     @NotNull private BigDecimal paidAmount;
-    @NotNull private Integer productCount;
+    private Integer productCount;
     @NotNull private String customerType;
     private String customerGender;
     private String customerAgeRange;
@@ -63,6 +63,10 @@ public class SalesCreateDTO {
         private String material;
         private String weight;
         private String size;
+        private String color;
+        private String shape;
+        private String meaning;
+        private String productPhotoUrls;
         private BigDecimal price;
         private Integer quantity;
         private BigDecimal grossMarginRate;
@@ -83,6 +87,14 @@ public class SalesCreateDTO {
         public void setWeight(String v) { this.weight = v; }
         public String getSize() { return size; }
         public void setSize(String v) { this.size = v; }
+        public String getColor() { return color; }
+        public void setColor(String v) { this.color = v; }
+        public String getShape() { return shape; }
+        public void setShape(String v) { this.shape = v; }
+        public String getMeaning() { return meaning; }
+        public void setMeaning(String v) { this.meaning = v; }
+        public String getProductPhotoUrls() { return productPhotoUrls; }
+        public void setProductPhotoUrls(String v) { this.productPhotoUrls = v; }
         public BigDecimal getPrice() { return price; }
         public void setPrice(BigDecimal v) { this.price = v; }
         public Integer getQuantity() { return quantity; }

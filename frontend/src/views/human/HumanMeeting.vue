@@ -38,8 +38,6 @@
           <template v-if="column.key === 'action'">
             <div class="action-btns">
               <a @click="handleView(record)" class="action-link">查看</a>
-              <a-divider type="vertical" />
-              <a @click="handleMinutes(record)" class="action-link">纪要</a>
             </div>
           </template>
         </template>
@@ -49,6 +47,9 @@
     <!-- 创建弹窗 -->
     <a-modal v-model:open="modalVisible" title="创建会议" @ok="handleModalOk" :confirm-loading="modalLoading" width="560px">
       <a-form ref="formRef" :model="formData" :rules="formRules" :label-col="{ span: 6 }" :wrapper-col="{ span: 16 }">
+        <a-form-item label="会议主题" name="topic">
+          <a-input v-model:value="formData.topic" placeholder="请输入会议主题" />
+        </a-form-item>
         <a-form-item label="会议类型" name="meetingType">
           <a-select v-model:value="formData.meetingType" placeholder="请选择会议类型">
             <a-select-option value="MORNING">晨会</a-select-option>
@@ -68,9 +69,12 @@
     </a-modal>
     <a-modal v-model:open="detailVisible" title="详情" :footer="null" width="600px">
       <a-descriptions :column="2" bordered size="small">
-        <a-descriptions-item v-for="(val, key) in detailRecord" :key="key" :label="String(key)" :span="typeof val === 'object' ? 2 : 1">
-          {{ typeof val === 'object' ? JSON.stringify(val) : val }}
-        </a-descriptions-item>
+        <a-descriptions-item label="会议主题">{{ detailRecord?.topic }}</a-descriptions-item>
+        <a-descriptions-item label="会议类型">{{ detailRecord?.meetingType === 'MORNING' ? '晨会' : '夕会' }}</a-descriptions-item>
+        <a-descriptions-item label="会议日期">{{ detailRecord?.meetingDate }}</a-descriptions-item>
+        <a-descriptions-item label="主持人">{{ detailRecord?.host }}</a-descriptions-item>
+        <a-descriptions-item label="参与人员">{{ detailRecord?.participants }}</a-descriptions-item>
+        <a-descriptions-item label="状态">{{ detailRecord ? getMeetingStatus(detailRecord).text : '-' }}</a-descriptions-item>
       </a-descriptions>
     </a-modal>
   </div>
@@ -79,17 +83,32 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
+import dayjs from 'dayjs'
 import { PlusOutlined, SearchOutlined } from '@ant-design/icons-vue'
-import type { MeetingItem, MeetingType, HumanQueryParams } from '@/types/human'
+import type { MeetingItem, MeetingType } from '@/types/human'
 import { meetingApi } from '@/api/human'
+import { useCrudTable } from '@/composables/useCrudTable'
+import { useDetailModal } from '@/composables/useDetailModal'
 
 const searchForm = reactive({ dateRange: null as any, type: undefined as MeetingType | undefined })
-const tableData = ref<MeetingItem[]>([])
-const loading = ref(false)
-const pagination = reactive({ current: 1, pageSize: 10, total: 0, showSizeChanger: true, showQuickJumper: true, showTotal: (total: number) => `共 ${total} 条` })
+
+const { tableData, loading, pagination, loadData, handleSearch, handleTableChange } = useCrudTable<any, typeof searchForm>({
+  searchForm,
+  loadFn: (params) => meetingApi.getList({
+    page: params.page,
+    pageSize: params.pageSize,
+    meetingType: params.type,
+    ...(params.dateRange?.[0] ? {
+      startDate: params.dateRange[0].format('YYYY-MM-DD'),
+      endDate: params.dateRange[1].format('YYYY-MM-DD'),
+    } : {}),
+  }),
+})
+
+const { detailVisible, detailRecord, openDetail } = useDetailModal<MeetingItem>()
 
 const columns = [
-  { title: '会议主题', dataIndex: 'meetingDate', key: 'meetingDate', width: 160 },
+  { title: '会议主题', dataIndex: 'topic', key: 'topic', width: 160 },
   { title: '会议类型', key: 'meetingType', width: 100, align: 'center' as const },
   { title: '会议日期', dataIndex: 'meetingDate', key: 'meetingDate2', width: 160 },
   { title: '主持人', dataIndex: 'host', key: 'host', width: 90 },
@@ -97,41 +116,43 @@ const columns = [
   { title: '操作', key: 'action', width: 120, fixed: 'right' as const }
 ]
 
-const detailVisible = ref(false)
-const detailRecord = ref<any>(null)
-
 const modalVisible = ref(false)
 const modalLoading = ref(false)
 const formRef = ref()
-const formData = reactive({ meetingType: undefined as MeetingType | undefined, meetingDate: null as any, host: '', participants: 0 })
-const formRules = { meetingType: [{ required: true, message: '请选择会议类型', trigger: 'change' }], host: [{ required: true, message: '请输入主持人', trigger: 'blur' }] }
+const formData = reactive({ topic: '', meetingType: undefined as MeetingType | undefined, meetingDate: null as any, host: '', participants: 0 })
+const formRules = { topic: [{ required: true, message: '请输入会议主题', trigger: 'blur' }], meetingType: [{ required: true, message: '请选择会议类型', trigger: 'change' }], host: [{ required: true, message: '请输入主持人', trigger: 'blur' }] }
 
-const loadData = async () => {
-  loading.value = true
-  try {
-    const params: any = { page: pagination.current, pageSize: pagination.pageSize }
-    const res: any = await meetingApi.getList(params)
-    tableData.value = res.list || []; pagination.total = res.total || 0
-  } catch { message.error('加载数据失败') } finally { loading.value = false }
-}
-
-const handleSearch = () => { pagination.current = 1; loadData() }
 const handleReset = () => { searchForm.dateRange = null; searchForm.type = undefined; handleSearch() }
-const handleTableChange = (pag: any) => { pagination.current = pag.current; pagination.pageSize = pag.size || 10; loadData() }
-const handleView = (record: MeetingItem) => { detailRecord.value = record; detailVisible.value = true }
-const handleMinutes = (record: MeetingItem) => {
-  detailRecord.value = record
-  detailVisible.value = true
-}
+const handleView = (record: MeetingItem) => { openDetail(record) }
 const handleAdd = () => { resetForm(); modalVisible.value = true }
+
+// 根据会议日期 + 当前时间动态计算状态，解决状态不自动更新的问题
+const getMeetingStatus = (record: MeetingItem): { text: string; color: string } => {
+  // 已取消优先（手动取消）
+  if (record.status === 'cancelled') return { text: '已取消', color: 'red' }
+  // 显式标记为已结束
+  if (record.status === 'ended') return { text: '已结束', color: 'default' }
+  // 按会议日期动态判断
+  if (record.meetingDate) {
+    const date = dayjs(record.meetingDate)
+    const now = dayjs()
+    if (date.isBefore(now)) return { text: '已结束', color: 'default' }
+    if (date.isAfter(now)) return { text: '未开始', color: 'orange' }
+  }
+  return { text: '进行中', color: 'green' }
+}
+
 const handleModalOk = async () => {
   try {
     await formRef.value?.validateFields(); modalLoading.value = true
-    await meetingApi.create({ meetingType: formData.meetingType!, meetingDate: formData.meetingDate?.format?.('YYYY-MM-DD HH:mm:ss') || '', host: formData.host, participants: formData.participants, storeTargetAmount: 0, mainProducts: '', keyCustomers: '', todayStrategy: '', employeeTargets: {}, meetingPhotoUrls: [], status: 'completed' })
+    // 创建时根据会议日期计算初始状态：过去=已结束，未来/今天=进行中
+    const meetingDate = formData.meetingDate?.format?.('YYYY-MM-DD HH:mm:ss') || ''
+    const initialStatus = meetingDate && dayjs(meetingDate).isBefore(dayjs()) ? 'ended' : 'ongoing'
+    await meetingApi.create({ topic: formData.topic, meetingType: formData.meetingType!, meetingDate, host: formData.host, participants: String(formData.participants), status: initialStatus })
     message.success('创建成功'); modalVisible.value = false; loadData()
   } catch {} finally { modalLoading.value = false }
 }
-const resetForm = () => { formData.meetingType = undefined; formData.meetingDate = null; formData.host = ''; formData.participants = 0 }
+const resetForm = () => { formData.topic = ''; formData.meetingType = undefined; formData.meetingDate = null; formData.host = ''; formData.participants = 0 }
 onMounted(() => { loadData() })
 </script>
 

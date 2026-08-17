@@ -20,15 +20,19 @@
             <span class="filter-label">时间范围</span>
             <a-range-picker v-model:value="dateRange" style="width: 240px" />
           </a-space>
-          <a-space>
+          <a-space v-if="activeType !== '员工分析'">
             <span class="filter-label">分析门店</span>
-            <a-select v-model:value="storeId" placeholder="全部门店" style="width: 140px">
-              <a-select-option value="all">全部门店</a-select-option>
-              <a-select-option value="1">深圳总店</a-select-option>
-              <a-select-option value="2">北京旗舰店</a-select-option>
+            <a-select v-model:value="storeId" placeholder="选择门店" style="width: 140px">
+              <a-select-option v-for="s in storeOptions" :key="s.id" :value="String(s.id)">{{ s.name }}</a-select-option>
             </a-select>
           </a-space>
-          <a-button type="primary" @click="handleAnalyze">
+          <a-space v-else>
+            <span class="filter-label">分析员工</span>
+            <a-select v-model:value="employeeId" placeholder="选择员工" style="width: 140px">
+              <a-select-option v-for="u in employeeOptions" :key="u.id" :value="String(u.id)">{{ u.name }}</a-select-option>
+            </a-select>
+          </a-space>
+          <a-button type="primary" :loading="analyzing" @click="handleAnalyze">
             <RocketOutlined /> 开始分析
           </a-button>
         </div>
@@ -36,31 +40,27 @@
     </div>
 
     <!-- 统计卡片 -->
-    <div class="stats-row">
+    <div v-if="hasReport" class="stats-row">
       <div class="stat-card blue">
         <div class="stat-label">销售额</div>
         <div class="stat-value">¥ {{ report.totalSales.toLocaleString() }}</div>
-        <div class="stat-trend up">较上月 ↑ 5.2%</div>
       </div>
       <div class="stat-card green">
         <div class="stat-label">订单数</div>
         <div class="stat-value">{{ report.orderCount.toLocaleString() }}</div>
-        <div class="stat-trend up">较上月 ↑ 3.8%</div>
       </div>
       <div class="stat-card purple">
         <div class="stat-label">客户数</div>
         <div class="stat-value">{{ report.customerCount }}</div>
-        <div class="stat-trend up">较上月 ↑ 2.5%</div>
       </div>
       <div class="stat-card orange">
         <div class="stat-label">客单价</div>
         <div class="stat-value">¥ {{ report.avgOrderAmount.toLocaleString() }}</div>
-        <div class="stat-trend down">较上月 ↓ 1.2%</div>
       </div>
     </div>
 
     <!-- 图表区域 -->
-    <div class="charts-row">
+    <div v-if="hasReport" class="charts-row">
       <div class="content-card chart-card">
         <div class="chart-title">销售趋势分布</div>
         <div class="simple-chart">
@@ -84,31 +84,193 @@
         </div>
       </div>
     </div>
+
+    <!-- 空态 / 加载 -->
+    <div class="content-card">
+      <a-spin v-if="loading" class="spin-center" />
+      <a-empty v-else-if="!hasReport" description="暂无分析报告，点击「开始分析」生成门店综合报告" />
+      <template v-else>
+        <div class="report-meta">
+          <a-tag color="green">最新报告</a-tag>
+          <span>业务类型：{{ latestResult?.businessType }}</span>
+          <span>关联对象：{{ latestResult?.relatedId }}</span>
+          <span>模型：{{ latestResult?.modelName || '-' }}</span>
+          <span>生成时间：{{ (latestResult?.createdAt || '').slice(0, 19) }}</span>
+        </div>
+      </template>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive } from 'vue'
+import { ref, reactive, computed, onMounted, onBeforeUnmount } from 'vue'
 import { message } from 'ant-design-vue'
 import { RocketOutlined } from '@ant-design/icons-vue'
-import type { AnalysisReport } from '@/types/ai-tools'
-import { mockAnalysisReport } from '@/api/ai'
+import type { Dayjs } from 'dayjs'
+import { aiApi } from '@/api/ai'
+import { userApi } from '@/api/system'
+import request from '@/utils/request'
 
-const activeType = ref('销售数据分析')
-const dateRange = ref<any>(null)
-const storeId = ref('all')
-const analysisTypes = ['销售数据分析', '客户分析', '货品分析', '营销分析', '财务分析']
+const activeType = ref('门店综合')
+const dateRange = ref<Dayjs[] | null>(null)
+const storeId = ref('')
+const employeeId = ref('')
+const storeOptions = ref<{ id: number; name: string }[]>([])
+const employeeOptions = ref<{ id: number; name: string }[]>([])
+const loading = ref(false)
+const analyzing = ref(false)
+const latestResult = ref<any>(null)
+const analysisTypes = ['门店综合', '员工分析', '货品分析', '场景分析']
 
-const report = reactive<AnalysisReport>({ ...mockAnalysisReport })
+const emptyReport = {
+  totalSales: 0,
+  orderCount: 0,
+  customerCount: 0,
+  avgOrderAmount: 0,
+  salesTrend: [] as { date: string; value: number }[],
+  channelBreakdown: [] as { name: string; value: number; color: string }[],
+}
+
+const report = reactive({ ...emptyReport })
+const hasReport = computed(() => latestResult.value != null)
 
 const getBarHeight = (value: number) => {
-  const max = Math.max(...report.salesTrend.map(i => i.value))
+  const arr = report.salesTrend.map(i => i.value)
+  if (arr.length === 0) return 0
+  const max = Math.max(...arr, 1)
   return (value / max) * 100
 }
 
-const handleAnalyze = () => {
-  message.success('正在分析数据，请稍候...')
+// 解析 AI 输出中的结构化字段（防御性解析，字段缺失用默认值）
+const parseReport = (item: any) => {
+  Object.assign(report, emptyReport)
+  latestResult.value = item
+  let data: any = null
+  if (item.outputJson) {
+    try {
+      data = typeof item.outputJson === 'string' ? JSON.parse(item.outputJson) : item.outputJson
+    } catch (e) {
+      data = null
+    }
+  }
+  if (data) {
+    report.totalSales = Number(data.totalSales ?? data.salesAmount ?? data.amount ?? 0)
+    report.orderCount = Number(data.orderCount ?? data.orders ?? 0)
+    report.customerCount = Number(data.customerCount ?? data.customers ?? 0)
+    report.avgOrderAmount = Number(data.avgOrderAmount ?? 0)
+    report.salesTrend = Array.isArray(data.salesTrend)
+      ? data.salesTrend.map((t: any) => ({ date: String(t.date ?? t.label ?? ''), value: Number(t.value ?? 0) }))
+      : []
+    report.channelBreakdown = Array.isArray(data.channelBreakdown)
+      ? data.channelBreakdown.map((c: any, i: number) => ({
+          name: String(c.name ?? '渠道' + (i + 1)),
+          value: Number(c.value ?? 0),
+          color: c.color || ['#1890ff', '#52c41a', '#fa8c16', '#722ed1'][i % 4],
+        }))
+      : []
+  }
 }
+
+const loadReport = async () => {
+  loading.value = true
+  try {
+    const results = await aiApi.getResults()
+    // 后端 /ai/results 无日期参数，时间范围在前端过滤
+    let filtered = results || []
+    if (dateRange.value?.[0] && dateRange.value?.[1]) {
+      const start = dateRange.value[0].format('YYYY-MM-DD')
+      const end = dateRange.value[1].format('YYYY-MM-DD')
+      filtered = filtered.filter(r => {
+        const d = (r.createdAt || '').slice(0, 10)
+        return d >= start && d <= end
+      })
+    }
+    const success = filtered.find(r => r.status === 'SUCCESS')
+    if (success) {
+      parseReport(success)
+    } else {
+      latestResult.value = null
+    }
+  } catch (e) {
+    latestResult.value = null
+  } finally {
+    loading.value = false
+  }
+}
+
+const loadStores = async () => {
+  try {
+    const list: any[] = await request.get('/stores/all')
+    storeOptions.value = (list || []).map(s => ({ id: Number(s.id), name: s.name || `门店${s.id}` }))
+  } catch (e) {
+    storeOptions.value = []
+  }
+}
+
+const loadEmployees = async () => {
+  try {
+    const res: any = await userApi.getList({ page: 1, pageSize: 200 })
+    employeeOptions.value = (res.list || []).map((u: any) => ({ id: Number(u.id), name: u.realName || u.username }))
+  } catch (e) {
+    employeeOptions.value = []
+  }
+}
+
+let pollTimer: number | null = null
+let pollTries = 0
+let pendingBeforeId = 0
+
+const pollReport = async () => {
+  try {
+    const results = await aiApi.getResults()
+    const hasNew = (results || []).some(r => Number(r.id) > pendingBeforeId)
+    if (hasNew) {
+      await loadReport()
+      return
+    }
+  } catch (e) { /* 忽略轮询错误 */ }
+  if (pollTries >= 40) return
+  pollTries++
+  pollTimer = window.setTimeout(pollReport, 2000)
+}
+
+const handleAnalyze = async () => {
+  if (analyzing.value) return
+  const typeMap: Record<string, { type: string; id: number } | null> = {
+    '门店综合': storeId.value ? { type: 'store', id: Number(storeId.value) } : null,
+    '员工分析': employeeId.value ? { type: 'employee', id: Number(employeeId.value) } : null,
+    '货品分析': storeId.value ? { type: 'product', id: Number(storeId.value) } : null,
+    '场景分析': storeId.value ? { type: 'scene', id: Number(storeId.value) } : null,
+  }
+  const target = typeMap[activeType.value]
+  if (!target) {
+    message.warning(activeType.value === '员工分析' ? '请选择要分析的员工' : '请选择要分析的门店')
+    return
+  }
+  analyzing.value = true
+  try {
+    const results = await aiApi.getResults()
+    pendingBeforeId = results.reduce((m, s) => Math.max(m, Number(s.id) || 0), 0)
+    pollTries = 0
+    await aiApi.getAdvice(target.type, target.id)
+    message.success('分析已触发，生成完成后自动刷新')
+    pollReport()
+  } catch (e: any) {
+    message.error(e?.message || '分析触发失败')
+  } finally {
+    analyzing.value = false
+  }
+}
+
+onMounted(() => {
+  loadReport()
+  loadStores()
+  loadEmployees()
+})
+
+onBeforeUnmount(() => {
+  if (pollTimer) clearTimeout(pollTimer)
+})
 </script>
 
 <style scoped>
@@ -148,6 +310,8 @@ const handleAnalyze = () => {
 .channel-dot { width: 10px; height: 10px; border-radius: 50%; }
 .channel-name { flex: 1; color: #333; }
 .channel-value { color: #666; font-weight: 500; }
+.spin-center { display: flex; justify-content: center; padding: 40px 0; }
+.report-meta { display: flex; flex-wrap: wrap; gap: 12px; font-size: 13px; color: #666; }
 
 @media (max-width: 992px) { .stats-row { grid-template-columns: repeat(2, 1fr); } .charts-row { grid-template-columns: 1fr; } }
 @media (max-width: 768px) {

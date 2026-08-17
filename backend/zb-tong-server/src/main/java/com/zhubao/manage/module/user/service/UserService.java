@@ -66,6 +66,26 @@ public class UserService {
         if (StringUtils.isNotBlank(query.getStatus())) {
             wrapper.eq(User::getStatus, query.getStatus());
         }
+        // 按角色过滤：只返回拥有指定角色的用户
+        if (query.getRoleId() != null) {
+            List<Long> userIdsWithRole = userRoleMapper.selectList(
+                    new LambdaQueryWrapper<UserRole>().eq(UserRole::getRoleId, query.getRoleId()))
+                    .stream().map(UserRole::getUserId).distinct().collect(Collectors.toList());
+            if (userIdsWithRole.isEmpty()) {
+                IPage<UserVO> emptyPage = new Page<>(query.getPageNum(), query.getPageSize(), 0);
+                emptyPage.setRecords(Collections.emptyList());
+                return emptyPage;
+            }
+            wrapper.in(User::getId, userIdsWithRole);
+        } else {
+            // 默认排除 ROLE_CUSTOMER 客户（roleId=6），只返回内部员工
+            List<Long> customerUserIds = userRoleMapper.selectList(
+                    new LambdaQueryWrapper<UserRole>().eq(UserRole::getRoleId, 6L))
+                    .stream().map(UserRole::getUserId).distinct().collect(Collectors.toList());
+            if (!customerUserIds.isEmpty()) {
+                wrapper.notIn(User::getId, customerUserIds);
+            }
+        }
         wrapper.orderByDesc(User::getCreatedAt);
 
         IPage<User> userPage = userMapper.selectPage(page, wrapper);
@@ -150,7 +170,7 @@ public class UserService {
         user.setStoreId(dto.getStoreId());
         user.setRegionId(dto.getRegionId());
         user.setPosition(dto.getPosition());
-        user.setStatus("ACTIVE");
+        user.setStatus("ENABLED");
         if (StringUtils.isNotBlank(dto.getEntryDate())) {
             user.setEntryDate(LocalDate.parse(dto.getEntryDate()));
         }
@@ -245,5 +265,30 @@ public class UserService {
         vo.setLastLoginAt(u.getLastLoginAt());
         vo.setCreatedAt(u.getCreatedAt());
         return vo;
+    }
+
+    /**
+     * 强制下线 — 递增 tokenVersion，该用户所有已签发的 JWT 立即失效
+     */
+    @Transactional
+    public void forceLogout(Long userId) {
+        User user = getEntityById(userId);
+        int newVersion = (user.getTokenVersion() != null ? user.getTokenVersion() : 0) + 1;
+        user.setTokenVersion(newVersion);
+        userMapper.updateById(user);
+    }
+
+    @Transactional
+    public void changePassword(Long userId, String currentPassword, String newPassword) {
+        User user = userMapper.selectById(userId);
+        if (user == null) throw new BusinessException(ErrorCode.USER_NOT_FOUND);
+        if (!passwordEncoder.matches(currentPassword, user.getPasswordHash())) {
+            throw new BusinessException(400, "当前密码错误");
+        }
+        if (newPassword == null || newPassword.length() < 6) {
+            throw new BusinessException(400, "新密码不能少于6位");
+        }
+        user.setPasswordHash(passwordEncoder.encode(newPassword));
+        userMapper.updateById(user);
     }
 }

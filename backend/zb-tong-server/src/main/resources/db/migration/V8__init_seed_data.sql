@@ -184,9 +184,10 @@ WHERE status = 'ENABLED'
   );
 
 -- ==================== 5. 默认管理员账号 ====================
+-- 生产上线安全：不再内置弱口令默认账号，初始化后由运维手动创建管理员并设置强密码。
 -- 用户名: admin  密码: admin123  (BCrypt加密)
-INSERT IGNORE INTO `sys_user` (`id`, `username`, `password_hash`, `real_name`, `phone`, `status`, `is_deleted`) VALUES
-(1, 'admin', '$2b$10$BLVuYbMyQWZFLS3i1cBGo.ziBfANuXogm4BXvkqGjra/los2Kn1z6', '系统管理员', '13800000000', 'ACTIVE', 0);
+-- INSERT IGNORE INTO `sys_user` (`id`, `username`, `password_hash`, `real_name`, `phone`, `status`, `is_deleted`) VALUES
+-- (1, 'admin', '$2b$10$BLVuYbMyQWZFLS3i1cBGo.ziBfANuXogm4BXvkqGjra/los2Kn1z6', '系统管理员', '13800000000', 'ACTIVE', 0);
 
 -- 管理员绑定系统管理员角色
-INSERT IGNORE INTO `sys_user_role` (`user_id`, `role_id`) VALUES (1, 1);
+-- INSERT IGNORE INTO `sys_user_role` (`user_id`, `role_id`) VALUES (1, 1);

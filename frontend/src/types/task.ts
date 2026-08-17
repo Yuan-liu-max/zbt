@@ -35,6 +35,8 @@ export interface TaskItem {
   status: TaskStatus
   priority: TaskPriority
   sourceType: TaskSourceType
+  relatedObjectType?: string
+  relatedObjectId?: string
   isOverdue: boolean
   overdueMinutes: number
   qualityScore: number
@@ -42,6 +44,7 @@ export interface TaskItem {
   manualScore: number
   finalScore: number
   createdAt: string
+  updatedAt?: string
 }
 
 // 任务提交
@@ -58,33 +61,55 @@ export interface TaskSubmission {
 
 // 任务审核
 export interface TaskAudit {
-  auditId: number
-  auditorName: string
+  taskId: number
   auditResult: AuditResult
   auditComment: string
-  score: number
-  auditedAt: string
+  score?: number
+  auditorName?: string
+  auditedAt?: string
 }
 
 // 任务模板
 export interface TaskTemplate {
   id: number
-  name: string
-  type: string
-  creator: string
+  templateName: string
+  actionId?: number
+  dimension?: TaskDimension
+  category?: string
+  description?: string
+  executionStandard?: string
+  requiredPhotos?: boolean
+  requiredText?: boolean
+  requiredForm?: boolean
+  formSchemaId?: number
+  requireAudit?: boolean
+  defaultAuditorRole?: string
+  frequencyType?: string
+  cronExpression?: string
+  dueTimeRule?: string
+  reminderRule?: string
+  scoreWeight?: number
+  isDefault?: boolean
+  isForce?: boolean
+  applicableStoreIds?: string
+  applicableRegionIds?: string
+  status?: number
+  createdBy?: string
   createdAt: string
   updatedAt: string
 }
 
-// 任务审查
+// 任务审查（my-audit 返回 TaskInstance 数组，取相关字段）
 export interface TaskReviewItem {
   id: number
-  name: string
-  type: string
-  initiator: string
-  initiateTime: string
-  currentNode: string
-  status: string
+  taskNo: string
+  taskTitle: string
+  dimension: TaskDimension
+  assigneeName: string
+  auditorName: string
+  startTime: string
+  dueTime: string
+  status: TaskStatus
 }
 
 // 查询参数
@@ -94,23 +119,20 @@ export interface TaskQueryParams {
   status?: TaskStatus
   priority?: TaskPriority
   sourceType?: TaskSourceType
+  storeId?: number
+  assigneeId?: number
+  auditorId?: number
+  category?: string
+  isOverdue?: boolean
   startDate?: string
   endDate?: string
   page: number
-  size: number
+  pageSize: number
 }
 
 export interface TemplateQueryParams {
-  name?: string
-  type?: string
+  templateName?: string
+  dimension?: TaskDimension
   page: number
-  size: number
-}
-
-export interface ReviewQueryParams {
-  name?: string
-  type?: string
-  initiator?: string
-  page: number
-  size: number
+  pageSize: number
 }

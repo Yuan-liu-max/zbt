@@ -10,9 +10,9 @@
       <a-form layout="inline" :model="filterForm">
         <a-form-item label="门店">
           <a-select v-model:value="filterForm.storeId" placeholder="全部门店" allow-clear style="width: 150px">
-            <a-select-option value="1">深圳总店</a-select-option>
-            <a-select-option value="2">北京旗舰店</a-select-option>
-            <a-select-option value="3">上海中心店</a-select-option>
+            <a-select-option v-for="item in storeOptions" :key="item.id" :value="item.id">
+              {{ item.name }}
+            </a-select-option>
           </a-select>
         </a-form-item>
         <a-form-item label="时间范围">
@@ -34,27 +34,15 @@
           <div class="stats-grid">
             <div class="stat-item">
               <div class="stat-label">销售额</div>
-              <div class="stat-value gold">¥{{ salesStats.totalSales.toLocaleString() }}</div>
-            </div>
-            <div class="stat-item">
-              <div class="stat-label">完成率</div>
-              <div class="stat-value">{{ salesStats.completionRate }}%</div>
-            </div>
-            <div class="stat-item">
-              <div class="stat-label">新客比</div>
-              <div class="stat-value">{{ salesStats.newCustomerRatio }}%</div>
-            </div>
-            <div class="stat-item">
-              <div class="stat-label">老客比</div>
-              <div class="stat-value">{{ salesStats.oldCustomerRatio }}%</div>
+              <div class="stat-value gold">¥{{ salesStats.totalAmount.toLocaleString() }}</div>
             </div>
             <div class="stat-item">
               <div class="stat-label">订单数</div>
               <div class="stat-value">{{ salesStats.orderCount }}</div>
             </div>
             <div class="stat-item">
-              <div class="stat-label">客单价</div>
-              <div class="stat-value">¥{{ salesStats.avgOrderAmount.toLocaleString() }}</div>
+              <div class="stat-label">今日销售</div>
+              <div class="stat-value">¥{{ salesStats.todayAmount.toLocaleString() }}</div>
             </div>
           </div>
 
@@ -85,7 +73,7 @@
                 <span class="rank-badge" :class="'rank-' + record.rank">{{ record.rank }}</span>
               </template>
               <template v-if="column.key === 'salesAmount'">
-                <span class="amount">¥{{ record.salesAmount.toLocaleString() }}</span>
+                <span class="amount">¥{{ record.amount.toLocaleString() }}</span>
               </template>
             </template>
           </a-table>
@@ -112,38 +100,50 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { SearchOutlined } from '@ant-design/icons-vue'
-import type { SalesStats, EmployeeRanking, CategoryStats } from '@/types/sales'
+import type { SalesStats, EmployeeRanking } from '@/types/sales'
 import { salesApi } from '@/api/sales'
+import { storeApi } from '@/api/store'
+import { userApi } from '@/api/system'
 
 // 当前标签页
 const activeTab = ref('store')
 
+// 门店下拉（GET /stores/all）
+const storeOptions = ref<{ id: number; name: string }[]>([])
+
 // 筛选条件
 const filterForm = reactive({
-  storeId: undefined as string | undefined,
+  storeId: undefined as number | undefined,
   dateRange: null as any
 })
 
-// 统计数据
+// 统计数据（后端 /sales/stats → {totalAmount, orderCount, todayAmount}）
 const salesStats = reactive<SalesStats>({
-  totalSales: 0,
-  completionRate: 0,
-  newCustomerRatio: 0,
-  oldCustomerRatio: 0,
+  totalAmount: 0,
   orderCount: 0,
-  avgOrderAmount: 0
+  todayAmount: 0
 })
 
-const employeeRanking = ref<EmployeeRanking[]>([])
-const categoryStats = ref<CategoryStats[]>([])
+// 员工排行（后端 /sales/ranking/employees → [{employeeId, amount}]，无姓名）
+interface RankingRow extends EmployeeRanking {
+  rank: number
+  name: string
+}
+const employeeRanking = ref<RankingRow[]>([])
+
+// 品类统计（后端 /sales/category-structure → [{category, amount}]）
+interface CategoryRow {
+  name: string
+  value: number
+  percentage: number
+}
+const categoryStats = ref<CategoryRow[]>([])
 
 // 排行榜列配置
 const rankingColumns = [
   { title: '排名', dataIndex: 'rank', key: 'rank', width: 80, align: 'center' as const },
   { title: '姓名', dataIndex: 'name', key: 'name', width: 120 },
-  { title: '销售额', dataIndex: 'salesAmount', key: 'salesAmount', width: 150, align: 'right' as const },
-  { title: '订单数', dataIndex: 'orderCount', key: 'orderCount', width: 100, align: 'center' as const },
-  { title: '客单价', dataIndex: 'avgOrderAmount', key: 'avgOrderAmount', width: 120, align: 'right' as const },
+  { title: '销售额', dataIndex: 'amount', key: 'salesAmount', width: 150, align: 'right' as const },
 ]
 
 // 品类颜色
@@ -158,23 +158,56 @@ const getCategoryColor = (name: string) => {
   return colors[name] || '#1890ff'
 }
 
+// 当前查询月份（筛选条件优先，否则取当前月）
+const getMonth = (): string => {
+  if (filterForm.dateRange?.[0]) {
+    return filterForm.dateRange[0].format?.('YYYY-MM') || String(filterForm.dateRange[0]).slice(0, 7)
+  }
+  return new Date().toISOString().slice(0, 7)
+}
+
 // 加载数据
 const loadData = async () => {
   try {
+    const month = getMonth()
     const [stats, ranking, category] = await Promise.all([
       salesApi.getStats(),
-      salesApi.getEmployeeRanking(),
-      salesApi.getCategoryStats()
+      salesApi.getEmployeeRanking(month, 10),
+      salesApi.getCategoryStats(month, filterForm.storeId)
     ])
     Object.assign(salesStats, stats)
-    employeeRanking.value = ranking
-    categoryStats.value = category
+    const total = category.reduce((sum, item) => sum + Number(item.amount || 0), 0)
+    categoryStats.value = category.map((item) => ({
+      name: item.category,
+      value: Number(item.amount || 0),
+      percentage: total > 0 ? Math.round((Number(item.amount || 0) / total) * 100) : 0
+    }))
+    const userMap = new Map(userOptions.value.map((u) => [u.id, u.name]))
+    employeeRanking.value = ranking.map((item, idx) => ({
+      ...item,
+      rank: idx + 1,
+      name: userMap.get(item.employeeId) || `员工${item.employeeId}`
+    }))
   } catch (error) {
     console.error('加载数据失败', error)
   }
 }
 
+// 用户列表（用于排行姓名映射）
+const userOptions = ref<{ id: number; name: string }[]>([])
+const loadOptions = async () => {
+  try {
+    const [stores, users] = await Promise.all([
+      storeApi.getAll(),
+      userApi.getList({ page: 1, pageSize: 200, roleId: 5 }), // roleId=5 只查导购角色（销售排行用）
+    ])
+    storeOptions.value = stores.map((s) => ({ id: Number(s.id), name: s.name }))
+    userOptions.value = users.list.map((u) => ({ id: Number(u.id), name: u.realName || u.username }))
+  } catch {}
+}
+
 onMounted(() => {
+  loadOptions()
   loadData()
 })
 </script>

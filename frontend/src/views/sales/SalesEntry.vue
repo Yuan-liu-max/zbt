@@ -23,19 +23,19 @@
           </a-col>
           <a-col :xs="24" :sm="12" :md="8">
             <a-form-item label="门店" name="storeId">
-              <a-select v-model:value="formData.storeId" placeholder="请选择门店">
-                <a-select-option value="1">深圳总店</a-select-option>
-                <a-select-option value="2">北京旗舰店</a-select-option>
-                <a-select-option value="3">上海中心店</a-select-option>
+              <a-select v-model:value="formData.storeId" placeholder="请选择门店" allow-clear>
+                <a-select-option v-for="item in storeOptions" :key="item.id" :value="item.id">
+                  {{ item.name }}
+                </a-select-option>
               </a-select>
             </a-form-item>
           </a-col>
           <a-col :xs="24" :sm="12" :md="8">
-            <a-form-item label="导购" name="employeeName">
-              <a-select v-model:value="formData.employeeName" placeholder="请选择导购">
-                <a-select-option value="张导">张导</a-select-option>
-                <a-select-option value="李导">李导</a-select-option>
-                <a-select-option value="王导">王导</a-select-option>
+            <a-form-item label="导购" name="employeeId">
+              <a-select v-model:value="formData.employeeId" placeholder="请选择导购" allow-clear>
+                <a-select-option v-for="item in userOptions" :key="item.id" :value="item.id">
+                  {{ item.name }}
+                </a-select-option>
               </a-select>
             </a-form-item>
           </a-col>
@@ -57,12 +57,12 @@
           <a-col :xs="24" :sm="12" :md="8">
             <a-form-item label="购买场景" name="purchaseScene">
               <a-select v-model:value="formData.purchaseScene" placeholder="请选择">
-                <a-select-option value="wedding">婚庆</a-select-option>
-                <a-select-option value="gift">礼品</a-select-option>
-                <a-select-option value="self">自用</a-select-option>
-                <a-select-option value="invest">投资</a-select-option>
-                <a-select-option value="holiday">节日</a-select-option>
-                <a-select-option value="other">其他</a-select-option>
+                <a-select-option value="WEDDING">婚庆</a-select-option>
+                <a-select-option value="GIFT">礼品</a-select-option>
+                <a-select-option value="SELF">自用</a-select-option>
+                <a-select-option value="INVEST">投资</a-select-option>
+                <a-select-option value="HOLIDAY">节日</a-select-option>
+                <a-select-option value="OTHER">其他</a-select-option>
               </a-select>
             </a-form-item>
           </a-col>
@@ -109,7 +109,7 @@
             </a-col>
             <a-col :xs="24" :sm="12" :md="8">
               <a-form-item label="规格">
-                <a-input v-model:value="item.spec" placeholder="请输入规格" />
+                <a-input v-model:value="item.size" placeholder="请输入规格" />
               </a-form-item>
             </a-col>
             <a-col :xs="24" :sm="12" :md="8">
@@ -124,7 +124,7 @@
             </a-col>
             <a-col :xs="24" :sm="12" :md="8">
               <a-form-item label="金额">
-                <span class="amount-text">¥{{ (item.price * item.quantity).toFixed(2) }}</span>
+                <span class="amount-text">¥{{ ((item.price || 0) * (item.quantity || 0)).toFixed(2) }}</span>
               </a-form-item>
             </a-col>
           </a-row>
@@ -157,32 +157,50 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
 import { PlusOutlined, DeleteOutlined } from '@ant-design/icons-vue'
-import type { SalesItem } from '@/types/sales'
+import type { SalesItem, PurchaseScene } from '@/types/sales'
 import { salesApi } from '@/api/sales'
+import { storeApi } from '@/api/store'
+import { userApi } from '@/api/system'
 
 const formRef = ref()
 const submitLoading = ref(false)
 
+// 门店下拉（GET /stores/all）
+const storeOptions = ref<{ id: number; name: string }[]>([])
+// 导购下拉（GET /users?page=1&pageSize=200）
+const userOptions = ref<{ id: number; name: string }[]>([])
+
+const loadOptions = async () => {
+  try {
+    const [stores, users] = await Promise.all([
+      storeApi.getAll(),
+      userApi.getList({ page: 1, pageSize: 200, roleId: 5 }), // roleId=5 只查导购角色
+    ])
+    storeOptions.value = stores.map((s) => ({ id: Number(s.id), name: s.name }))
+    userOptions.value = users.list.map((u) => ({ id: Number(u.id), name: u.realName || u.username }))
+  } catch {}
+}
+
 // 表单数据
 const formData = reactive({
   salesDate: null as any,
-  storeId: '',
-  employeeName: '',
+  storeId: undefined as number | undefined,
+  employeeId: undefined as number | undefined,
   customerType: 'new' as 'new' | 'old',
-  purchaseScene: 'self' as string,
+  purchaseScene: 'SELF' as PurchaseScene,
   paidAmount: 0,
   items: [
-    { productName: '', category: '', spec: '', price: 0, quantity: 1 }
+    { productName: '', category: '', size: '', price: 0, quantity: 1 }
   ] as Partial<SalesItem>[]
 })
 
 const formRules = {
   salesDate: [{ required: true, message: '请选择销售日期', trigger: 'change' }],
   storeId: [{ required: true, message: '请选择门店', trigger: 'change' }],
-  employeeName: [{ required: true, message: '请选择导购', trigger: 'change' }],
+  employeeId: [{ required: true, message: '请选择导购', trigger: 'change' }],
   customerType: [{ required: true, message: '请选择客户类型', trigger: 'change' }]
 }
 
@@ -193,7 +211,7 @@ const totalAmount = computed(() => {
 
 // 添加商品
 const addItem = () => {
-  formData.items.push({ productName: '', category: '', spec: '', price: 0, quantity: 1 })
+  formData.items.push({ productName: '', category: '', size: '', price: 0, quantity: 1 })
 }
 
 // 删除商品
@@ -201,32 +219,36 @@ const removeItem = (index: number) => {
   formData.items.splice(index, 1)
 }
 
-// 提交
+// 提交（对齐后端 SalesCreateDTO 字段）
 const handleSubmit = async () => {
   try {
     await formRef.value?.validateFields()
     submitLoading.value = true
 
-    const items = formData.items.map((item, index) => ({
-      id: String(index + 1),
+    const items = formData.items.map((item) => ({
       productName: item.productName || '',
       category: item.category || '',
-      spec: item.spec || '',
+      style: item.style || '',
+      material: item.material || '',
+      weight: item.weight || '',
+      size: item.size || '',
       price: item.price || 0,
       quantity: item.quantity || 1,
-      amount: (item.price || 0) * (item.quantity || 0)
+      customerFavoritePoint: item.customerFavoritePoint || '',
+      objection: item.objection || '',
+      closingReason: item.closingReason || '',
     }))
 
     await salesApi.create({
       salesDate: formData.salesDate?.format?.('YYYY-MM-DD') || new Date().toISOString().slice(0, 10),
-      storeId: formData.storeId,
-      storeName: formData.storeId === '1' ? '深圳总店' : formData.storeId === '2' ? '北京旗舰店' : '上海中心店',
-      employeeName: formData.employeeName,
-      customerType: formData.customerType,
-      purchaseScene: formData.purchaseScene as any,
+      storeId: formData.storeId!,
+      employeeId: formData.employeeId!,
+      customerType: formData.customerType === 'new' ? 'NEW' : 'OLD',
+      purchaseScene: formData.purchaseScene,
       totalAmount: totalAmount.value,
       paidAmount: formData.paidAmount,
-      items
+      productCount: formData.items.length,
+      items: items as SalesItem[]
     })
 
     message.success('销售单提交成功')
@@ -241,9 +263,13 @@ const handleSubmit = async () => {
 // 重置
 const handleReset = () => {
   formRef.value?.resetFields()
-  formData.items = [{ productName: '', category: '', spec: '', price: 0, quantity: 1 }]
+  formData.items = [{ productName: '', category: '', size: '', price: 0, quantity: 1 }]
   formData.paidAmount = 0
 }
+
+onMounted(() => {
+  loadOptions()
+})
 </script>
 
 <style scoped>

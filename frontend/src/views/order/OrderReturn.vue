@@ -21,14 +21,6 @@
             style="width: 180px"
           />
         </a-form-item>
-        <a-form-item label="订单号">
-          <a-input
-            v-model:value="searchForm.orderKeyword"
-            placeholder="请输入订单号"
-            allow-clear
-            style="width: 150px"
-          />
-        </a-form-item>
         <a-form-item label="申请类型">
           <a-select
             v-model:value="searchForm.returnType"
@@ -141,9 +133,25 @@
             <!-- 操作 -->
             <div class="return-footer">
               <a class="action-link" @click="handleViewDetail(item)">查看详情</a>
-              <template v-if="item.status === 'applying'">
+              <template v-if="String(item.status || '').toLowerCase() === 'applying'">
                 <a-divider type="vertical" />
                 <a class="action-link" @click="handleCancelApply(item)">撤销申请</a>
+                <a-divider type="vertical" />
+                <a class="action-link" @click="handleReview(item)">审核</a>
+                <a-divider type="vertical" />
+                <a class="action-link" style="color: #52c41a" @click="handleApprove(item)">同意</a>
+                <a-divider type="vertical" />
+                <a class="action-link" style="color: #ff4d4f" @click="handleReject(item)">拒绝</a>
+              </template>
+              <template v-if="String(item.status || '').toLowerCase() === 'reviewing'">
+                <a-divider type="vertical" />
+                <a class="action-link" style="color: #52c41a" @click="handleApprove(item)">同意</a>
+                <a-divider type="vertical" />
+                <a class="action-link" style="color: #ff4d4f" @click="handleReject(item)">拒绝</a>
+              </template>
+              <template v-if="String(item.status || '').toLowerCase() === 'approved'">
+                <a-divider type="vertical" />
+                <a class="action-link" style="color: #52c41a" @click="handleComplete(item)">确认完成</a>
               </template>
             </div>
           </div>
@@ -180,7 +188,9 @@ import { ref, reactive, watch, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import { SearchOutlined } from '@ant-design/icons-vue'
-import type { ReturnRecord, ReturnQueryParams, ReturnStatus, ReturnType } from '@/types/order'
+import { useCrudTable } from '@/composables/useCrudTable'
+import { useDetailModal } from '@/composables/useDetailModal'
+import type { ReturnRecord, ReturnStatus, ReturnType } from '@/types/order'
 import { returnApi, returnStatusMap } from '@/api/order'
 
 const router = useRouter()
@@ -191,27 +201,30 @@ const activeTab = ref<string>('all')
 // 搜索表单
 const searchForm = reactive({
   keyword: '',
-  orderKeyword: '',
   returnType: undefined as ReturnType | undefined,
   status: undefined as ReturnStatus | undefined,
   dateRange: null as any
 })
 
-// 表格数据
-const tableData = ref<ReturnRecord[]>([])
-const loading = ref(false)
-const pagination = reactive({
-  current: 1,
-  pageSize: 10,
-  total: 0,
-  showSizeChanger: true,
-  showQuickJumper: true,
-  showTotal: (total: number) => `共 ${total} 条`
+// 表格数据（使用 useCrudTable composable）
+const { tableData, loading, pagination, loadData, handleSearch } = useCrudTable<ReturnRecord, typeof searchForm>({
+  searchForm,
+  loadFn: (params) => {
+    const statusFilter = activeTab.value === 'all' ? (params as any).status : activeTab.value as ReturnStatus
+    return returnApi.getList({
+      keyword: (params as any).keyword || undefined,
+      returnType: (params as any).returnType,
+      status: statusFilter,
+      startDate: searchForm.dateRange?.[0]?.format?.('YYYY-MM-DD') || undefined,
+      endDate: searchForm.dateRange?.[1]?.format?.('YYYY-MM-DD') || undefined,
+      page: params.page || 1,
+      pageSize: params.pageSize || 10,
+    })
+  },
 })
 
-// 详情弹窗
-const detailVisible = ref(false)
-const detailRecord = ref<any>(null)
+// 详情弹窗（使用 useDetailModal composable）
+const { detailVisible, detailRecord, openDetail } = useDetailModal<ReturnRecord>()
 
 // 监听标签页切换
 watch(activeTab, () => {
@@ -219,50 +232,21 @@ watch(activeTab, () => {
   loadData()
 })
 
-// 状态颜色
-const getReturnStatusColor = (status: ReturnStatus) => {
-  return returnStatusMap[status]?.color || 'default'
+// 状态颜色（后端存在 cancelled 等大小写混用，统一转小写匹配）
+const getReturnStatusColor = (status: ReturnStatus | string) => {
+  const key = String(status || '').toLowerCase() as ReturnStatus
+  return returnStatusMap[key]?.color || 'default'
 }
 
 // 状态文本
-const getReturnStatusText = (status: ReturnStatus) => {
-  return returnStatusMap[status]?.text || status
+const getReturnStatusText = (status: ReturnStatus | string) => {
+  const key = String(status || '').toLowerCase() as ReturnStatus
+  return returnStatusMap[key]?.text || status
 }
 
-// 加载数据
-const loadData = async () => {
-  loading.value = true
-  try {
-    const statusFilter = activeTab.value === 'all' ? searchForm.status : activeTab.value as ReturnStatus
-    const params: ReturnQueryParams = {
-      keyword: searchForm.keyword || undefined,
-      returnType: searchForm.returnType,
-      status: statusFilter,
-      startDate: searchForm.dateRange?.[0]?.format?.('YYYY-MM-DD') || undefined,
-      endDate: searchForm.dateRange?.[1]?.format?.('YYYY-MM-DD') || undefined,
-      page: pagination.current,
-      pageSize: pagination.pageSize
-    }
-    const res = await returnApi.getList(params)
-    tableData.value = res.list
-    pagination.total = res.total
-  } catch (error) {
-    message.error('加载数据失败')
-  } finally {
-    loading.value = false
-  }
-}
-
-// 搜索
-const handleSearch = () => {
-  pagination.current = 1
-  loadData()
-}
-
-// 重置
+// 重置（覆盖 composable 版本以同步 activeTab）
 const handleReset = () => {
   searchForm.keyword = ''
-  searchForm.orderKeyword = ''
   searchForm.returnType = undefined
   searchForm.status = undefined
   searchForm.dateRange = null
@@ -270,7 +254,7 @@ const handleReset = () => {
   handleSearch()
 }
 
-// 分页
+// 分页（覆盖 composable 版本以适配独立 a-pagination 的 (page, pageSize) 签名）
 const handleTableChange = (page: number, pageSize: number) => {
   pagination.current = page
   pagination.pageSize = pageSize
@@ -283,10 +267,9 @@ const handleTabChange = () => {
   loadData()
 }
 
-// 查看详情
+// 查看详情（使用 useDetailModal 的 openDetail）
 const handleViewDetail = (item: ReturnRecord) => {
-  detailRecord.value = item
-  detailVisible.value = true
+  openDetail(item)
 }
 
 // 查看订单
@@ -300,7 +283,43 @@ const handleCancelApply = async (item: ReturnRecord) => {
     await returnApi.cancel(item.id)
     message.success('已撤销')
     loadData()
-  } catch { message.error('撤销失败') }
+  } catch (error) { console.error('撤销失败', error) }
+}
+
+// 审核
+const handleReview = async (item: ReturnRecord) => {
+  try {
+    await returnApi.review(item.id)
+    message.success('已转为审核中')
+    loadData()
+  } catch (error) { console.error('审核失败', error) }
+}
+
+// 同意退款
+const handleApprove = async (item: ReturnRecord) => {
+  try {
+    await returnApi.approve(item.id)
+    message.success('已同意退款申请')
+    loadData()
+  } catch (error) { console.error('操作失败', error) }
+}
+
+// 拒绝退款
+const handleReject = async (item: ReturnRecord) => {
+  try {
+    await returnApi.reject(item.id)
+    message.success('已拒绝退款申请')
+    loadData()
+  } catch (error) { console.error('操作失败', error) }
+}
+
+// 确认完成
+const handleComplete = async (item: ReturnRecord) => {
+  try {
+    await returnApi.complete(item.id)
+    message.success('退款已完成，库存已恢复')
+    loadData()
+  } catch (error) { console.error('操作失败', error) }
 }
 
 onMounted(() => {
@@ -333,19 +352,24 @@ onMounted(() => {
 
 .search-card {
   padding: 16px 24px;
+  overflow-x: auto;
 }
 
 .search-card :deep(.ant-form) {
+  display: flex;
   flex-wrap: wrap;
+  gap: 0 16px;
 }
 
 .search-card :deep(.ant-form-item) {
   margin-bottom: 12px;
   margin-right: 0;
+  flex-shrink: 0;
 }
 
 .tab-card {
   padding: 0 24px;
+  overflow-x: auto;
 }
 
 .tab-card :deep(.ant-tabs) {
@@ -354,6 +378,7 @@ onMounted(() => {
 
 .tab-card :deep(.ant-tabs-nav) {
   margin-bottom: 0;
+  white-space: nowrap;
 }
 
 /* 退换货列表 */
@@ -512,10 +537,17 @@ onMounted(() => {
 
   .search-card {
     padding: 12px 16px;
+    overflow-x: auto;
+  }
+
+  .search-card :deep(.ant-form) {
+    flex-direction: column;
+    gap: 0;
   }
 
   .search-card :deep(.ant-form-item) {
     width: 100%;
+    margin-bottom: 8px;
   }
 
   .search-card :deep(.ant-form-item-control) {
@@ -524,6 +556,7 @@ onMounted(() => {
 
   .tab-card {
     padding: 0 16px;
+    overflow-x: auto;
   }
 
   .product-icon {

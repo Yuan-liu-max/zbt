@@ -9,6 +9,7 @@ import java.time.LocalDateTime;
 @TableName("order_return")
 public class OrderReturn {
     @TableId(type = IdType.AUTO) private Long id;
+    private Long orderId;
     private String returnCode;
     private String orderCode;
     private String returnType;
@@ -16,6 +17,7 @@ public class OrderReturn {
     private String applyTime;
     private String status;
     private BigDecimal orderAmount;
+    private BigDecimal refundAmount;
     private String productName;
     private String productSpec;
     private String imageUrl;

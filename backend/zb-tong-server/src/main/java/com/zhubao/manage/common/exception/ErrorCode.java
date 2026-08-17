@@ -41,6 +41,7 @@ public enum ErrorCode {
     ROLE_NOT_FOUND(4001, "角色不存在"),
     ROLE_CODE_EXISTS(4002, "角色编码已存在"),
     PERMISSION_NOT_FOUND(4003, "权限不存在"),
+    ROLE_BUILTIN(4004, "内置角色不可删除"),
 
     // ---- 任务相关 5xxx ----
     TASK_NOT_FOUND(5001, "任务不存在"),

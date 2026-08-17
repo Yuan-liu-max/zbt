@@ -76,6 +76,16 @@ public class DataAssembler {
                         new LambdaQueryWrapper<SceneDisplayInspection>().eq(SceneDisplayInspection::getStoreId, relatedId)
                                 .orderByDesc(SceneDisplayInspection::getInspectionDate).last("LIMIT 5")));
                 break;
+            case "STORE":
+                data.put("products", productMapper.selectList(
+                        new LambdaQueryWrapper<Product>().eq(Product::getStoreId, relatedId).last("LIMIT 20")));
+                data.put("healthInspections", healthMapper.selectList(
+                        new LambdaQueryWrapper<SceneHealthInspection>().eq(SceneHealthInspection::getStoreId, relatedId)
+                                .orderByDesc(SceneHealthInspection::getInspectionDate).last("LIMIT 5")));
+                data.put("displayInspections", displayMapper.selectList(
+                        new LambdaQueryWrapper<SceneDisplayInspection>().eq(SceneDisplayInspection::getStoreId, relatedId)
+                                .orderByDesc(SceneDisplayInspection::getInspectionDate).last("LIMIT 5")));
+                break;
             case "TASK":
                 data.put("recentTasks", taskInstanceMapper.selectList(
                         new LambdaQueryWrapper<TaskInstance>().eq(TaskInstance::getAssigneeId, relatedId)

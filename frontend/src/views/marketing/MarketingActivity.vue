@@ -125,9 +125,14 @@
     </a-modal>
     <a-modal v-model:open="detailVisible" title="详情" :footer="null" width="600px">
       <a-descriptions :column="2" bordered size="small">
-        <a-descriptions-item v-for="(val, key) in detailRecord" :key="key" :label="String(key)" :span="typeof val === 'object' ? 2 : 1">
-          {{ typeof val === 'object' ? JSON.stringify(val) : val }}
-        </a-descriptions-item>
+        <a-descriptions-item label="活动名称">{{ detailRecord?.name }}</a-descriptions-item>
+        <a-descriptions-item label="活动类型">{{ activityTypeMap[detailRecord?.type ?? ''] || detailRecord?.type }}</a-descriptions-item>
+        <a-descriptions-item label="开始时间">{{ detailRecord?.startTime }}</a-descriptions-item>
+        <a-descriptions-item label="结束时间">{{ detailRecord?.endTime }}</a-descriptions-item>
+        <a-descriptions-item label="活动状态">{{ activityStatusMap[detailRecord?.status ?? '']?.text || detailRecord?.status }}</a-descriptions-item>
+        <a-descriptions-item label="参与范围">{{ detailRecord?.scope }}</a-descriptions-item>
+        <a-descriptions-item label="报名人数">{{ detailRecord?.registeredCount ?? 0 }}</a-descriptions-item>
+        <a-descriptions-item label="总人数">{{ detailRecord?.totalCount ?? 0 }}</a-descriptions-item>
       </a-descriptions>
     </a-modal>
   </div>
@@ -136,9 +141,12 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
+import dayjs from 'dayjs'
 import { PlusOutlined, SearchOutlined, DownOutlined } from '@ant-design/icons-vue'
-import type { ActivityItem, ActivityQueryParams, ActivityStatus, ActivityType } from '@/types/marketing'
+import type { ActivityItem, ActivityStatus, ActivityType } from '@/types/marketing'
 import { activityApi, activityStatusMap, activityTypeMap } from '@/api/marketing'
+import { useCrudTable } from '@/composables/useCrudTable'
+import { useDetailModal } from '@/composables/useDetailModal'
 
 const searchForm = reactive({
   name: '',
@@ -147,12 +155,19 @@ const searchForm = reactive({
   dateRange: null as any
 })
 
-const tableData = ref<ActivityItem[]>([])
-const loading = ref(false)
-const pagination = reactive({
-  current: 1, pageSize: 10, total: 0,
-  showSizeChanger: true, showQuickJumper: true,
-  showTotal: (total: number) => `共 ${total} 条`
+// 表格数据（useCrudTable 封装，dateRange 转为 startDate/endDate 传参）
+const { tableData, loading, pagination, loadData, handleSearch, handleTableChange } = useCrudTable<any, typeof searchForm>({
+  searchForm,
+  loadFn: (params) => {
+    const { dateRange, ...rest } = params as any
+    return activityApi.getList({
+      ...rest,
+      startDate: dateRange?.[0]?.format?.('YYYY-MM-DD') || undefined,
+      endDate: dateRange?.[1]?.format?.('YYYY-MM-DD') || undefined,
+    })
+  },
+  deleteFn: (id) => activityApi.delete(id),
+  onDeleteSuccess: () => message.success('删除成功'),
 })
 
 const columns = [
@@ -166,8 +181,8 @@ const columns = [
   { title: '操作', key: 'action', width: 150, fixed: 'right' as const }
 ]
 
-const detailVisible = ref(false)
-const detailRecord = ref<any>(null)
+// 详情弹窗（useDetailModal 封装）
+const { detailVisible, detailRecord, openDetail } = useDetailModal<ActivityItem>()
 
 const modalVisible = ref(false)
 const modalLoading = ref(false)
@@ -183,42 +198,40 @@ const formRules = {
   dateRange: [{ required: true, message: '请选择活动时间', trigger: 'change' }]
 }
 
-const loadData = async () => {
-  loading.value = true
-  try {
-    const params: ActivityQueryParams = {
-      name: searchForm.name || undefined, status: searchForm.status, type: searchForm.type,
-      page: pagination.current, pageSize: pagination.pageSize
-    }
-    const res = await activityApi.getList(params)
-    tableData.value = res.list
-    pagination.total = res.total
-  } catch (error) { message.error('加载数据失败') } finally { loading.value = false }
-}
-
-const handleSearch = () => { pagination.current = 1; loadData() }
 const handleReset = () => {
   searchForm.name = ''; searchForm.status = undefined; searchForm.type = undefined; searchForm.dateRange = null; handleSearch()
 }
-const handleTableChange = (pag: any) => { pagination.current = pag.current; pagination.pageSize = pag.pageSize; loadData() }
 const handleAdd = () => { isEdit.value = false; resetForm(); modalVisible.value = true }
-const handleView = (record: ActivityItem) => { detailRecord.value = record; detailVisible.value = true }
+const handleView = openDetail
 const handleEdit = (record: ActivityItem) => {
   isEdit.value = true; formData.id = record.id; formData.name = record.name; formData.type = record.type
-  formData.scope = record.scope; formData.totalCount = record.totalCount; modalVisible.value = true
+  formData.scope = record.scope; formData.totalCount = record.totalCount
+  formData.dateRange = record.startTime && record.endTime
+    ? [dayjs(record.startTime), dayjs(record.endTime)]
+    : null
+  modalVisible.value = true
 }
 const handleDelete = async (record: ActivityItem) => {
-  try { await activityApi.delete(record.id); message.success('删除成功'); loadData() } catch { message.error('删除失败') }
+  try { await activityApi.delete(record.id); message.success('删除成功'); loadData() } catch (error) { console.error('删除失败', error) }
+}
+// 按时间计算活动状态（与前端 statusMap 保持一致）
+const calcStatus = (startTime: string, endTime: string): ActivityStatus => {
+  const now = dayjs()
+  if (startTime && now.isBefore(dayjs(startTime))) return 'not_started'
+  if (endTime && now.isAfter(dayjs(endTime))) return 'ended'
+  return 'ongoing'
 }
 const handleModalOk = async () => {
   try {
     await formRef.value?.validateFields(); modalLoading.value = true
+    const startTime = formData.dateRange?.[0]?.format?.('YYYY-MM-DD HH:mm:ss') || ''
+    const endTime = formData.dateRange?.[1]?.format?.('YYYY-MM-DD HH:mm:ss') || ''
     const submitData = { name: formData.name, type: formData.type, scope: formData.scope, totalCount: formData.totalCount,
-      startTime: formData.dateRange?.[0]?.format?.('YYYY-MM-DD HH:mm:ss') || '', endTime: formData.dateRange?.[1]?.format?.('YYYY-MM-DD HH:mm:ss') || '' }
+      startTime, endTime, status: calcStatus(startTime, endTime) }
     if (isEdit.value) { await activityApi.update(formData.id, submitData); message.success('更新成功') }
     else { await activityApi.create(submitData); message.success('创建成功') }
     modalVisible.value = false; loadData()
-  } catch { console.error('表单验证失败') } finally { modalLoading.value = false }
+  } catch { message.error('操作失败') } finally { modalLoading.value = false }
 }
 const resetForm = () => { formData.id = ''; formData.name = ''; formData.type = 'promotion'; formData.dateRange = null; formData.scope = '全平台用户'; formData.totalCount = 0 }
 onMounted(() => { loadData() })

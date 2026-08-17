@@ -23,17 +23,12 @@
           />
         </a-form-item>
         <a-form-item label="联系人">
-          <a-select
+          <a-input
             v-model:value="searchForm.contactPerson"
             placeholder="请输入联系人"
             allow-clear
-            show-search
             style="width: 150px"
-          >
-            <a-select-option v-for="person in contactPersons" :key="person" :value="person">
-              {{ person }}
-            </a-select-option>
-          </a-select>
+          />
         </a-form-item>
         <a-form-item label="供应商类型">
           <a-select
@@ -113,7 +108,6 @@
                 <a class="action-link">更多 <DownOutlined /></a>
                 <template #overlay>
                   <a-menu>
-                    <a-menu-item @click="handleView(record)">查看详情</a-menu-item>
                     <a-menu-item v-if="record.status === 'cooperating'" @click="handleSuspend(record)">
                       暂停合作
                     </a-menu-item>
@@ -188,16 +182,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, onMounted, onUnmounted } from 'vue'
 import { message } from 'ant-design-vue'
 import { PlusOutlined, SearchOutlined, DownOutlined } from '@ant-design/icons-vue'
-import type { SupplierItem, SupplierQueryParams, SupplierType, CooperationStatus } from '@/types/supplier'
+import { useCrudTable } from '@/composables/useCrudTable'
+import { useDetailModal } from '@/composables/useDetailModal'
+import type { SupplierItem, SupplierType, CooperationStatus } from '@/types/supplier'
 import { supplierApi, supplierTypeMap, cooperationStatusMap } from '@/api/supplier'
-
-// 联系人列表（用于下拉搜索）
-const contactPersons = computed(() => {
-  return [...new Set(tableData.value.map(item => item.contactPerson))]
-})
 
 // 搜索表单
 const searchForm = reactive({
@@ -207,16 +198,19 @@ const searchForm = reactive({
   status: undefined as CooperationStatus | undefined
 })
 
-// 表格数据
-const tableData = ref<SupplierItem[]>([])
-const loading = ref(false)
-const pagination = reactive({
-  current: 1,
-  size: 10,
-  total: 0,
-  showSizeChanger: true,
-  showQuickJumper: true,
-  showTotal: (total: number) => `共 ${total} 条`
+// 表格数据（使用 useCrudTable composable）
+const { tableData, loading, pagination, loadData, handleSearch, handleTableChange, handleDelete: _handleDelete } = useCrudTable<SupplierItem, typeof searchForm>({
+  searchForm,
+  loadFn: (params) => supplierApi.getList({
+    name: (params as any).name || undefined,
+    contactPerson: (params as any).contactPerson,
+    type: (params as any).type,
+    status: (params as any).status,
+    page: params.page || 1,
+    pageSize: params.pageSize || 10,
+  }),
+  deleteFn: (id) => supplierApi.delete(id),
+  onDeleteSuccess: () => message.success('删除成功'),
 })
 
 // 获取列配置
@@ -248,9 +242,8 @@ const getColumnsValue = () => {
 // 表格列配置
 const columns = ref(getColumnsValue())
 
-// 详情弹窗
-const detailVisible = ref(false)
-const detailRecord = ref<any>(null)
+// 详情弹窗（使用 useDetailModal composable）
+const { detailVisible, detailRecord, openDetail } = useDetailModal<SupplierItem>()
 
 // 弹窗相关
 const modalVisible = ref(false)
@@ -289,48 +282,13 @@ const getLogoColor = (type: SupplierType) => {
   return colorMap[type] || '#1890ff'
 }
 
-// 加载数据
-const loadData = async () => {
-  loading.value = true
-  try {
-    const params: SupplierQueryParams = {
-      name: searchForm.name || undefined,
-      contactPerson: searchForm.contactPerson,
-      type: searchForm.type,
-      status: searchForm.status,
-      page: pagination.current,
-      pageSize: pagination.pageSize
-    }
-    const res = await supplierApi.getList(params)
-    tableData.value = res.list
-    pagination.total = res.total
-  } catch (error) {
-    message.error('加载数据失败')
-  } finally {
-    loading.value = false
-  }
-}
-
-// 搜索
-const handleSearch = () => {
-  pagination.current = 1
-  loadData()
-}
-
-// 重置
+// 重置（覆盖 composable 版本以正确清空表单字段）
 const handleReset = () => {
   searchForm.name = ''
   searchForm.contactPerson = undefined
   searchForm.type = undefined
   searchForm.status = undefined
   handleSearch()
-}
-
-// 分页
-const handleTableChange = (pag: any) => {
-  pagination.current = pag.current
-  pagination.pageSize = pag.pageSize
-  loadData()
 }
 
 // 新增
@@ -340,10 +298,9 @@ const handleAdd = () => {
   modalVisible.value = true
 }
 
-// 查看
+// 查看（使用 useDetailModal 的 openDetail）
 const handleView = (record: SupplierItem) => {
-  detailRecord.value = record
-  detailVisible.value = true
+  openDetail(record)
 }
 
 // 编辑
@@ -367,7 +324,7 @@ const handleSuspend = async (record: SupplierItem) => {
     message.success('已暂停合作')
     loadData()
   } catch (error) {
-    message.error('操作失败')
+    console.error('操作失败', error)
   }
 }
 
@@ -378,19 +335,13 @@ const handleResume = async (record: SupplierItem) => {
     message.success('已恢复合作')
     loadData()
   } catch (error) {
-    message.error('操作失败')
+    console.error('操作失败', error)
   }
 }
 
-// 删除
-const handleDelete = async (record: SupplierItem) => {
-  try {
-    await supplierApi.delete(record.id)
-    message.success('删除成功')
-    loadData()
-  } catch (error) {
-    message.error('删除失败')
-  }
+// 删除（包装 composable 版本，保留 record 参数签名）
+const handleDelete = (record: SupplierItem) => {
+  _handleDelete(record.id)
 }
 
 // 弹窗确认

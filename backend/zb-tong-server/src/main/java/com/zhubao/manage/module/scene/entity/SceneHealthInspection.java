@@ -2,7 +2,6 @@ package com.zhubao.manage.module.scene.entity;
 
 import com.baomidou.mybatisplus.annotation.*;
 import lombok.Data;
-import javax.validation.constraints.NotBlank;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
@@ -10,7 +9,7 @@ import java.time.LocalDateTime;
 @TableName("scene_health_inspection")
 public class SceneHealthInspection {
     @TableId(type = IdType.AUTO) private Long id;
-    @NotBlank(message = "巡检时段不能为空") private String inspectionTime;
+    private String inspectionTime;
     private LocalDate inspectionDate;
     private Long inspectorId;
     private Long storeId;

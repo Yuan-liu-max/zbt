@@ -1,10 +1,14 @@
 package com.zhubao.manage.module.ai.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.zhubao.manage.common.exception.BusinessException;
+import com.zhubao.manage.common.exception.ErrorCode;
 import com.zhubao.manage.module.ai.assembler.DataAssembler;
+import com.zhubao.manage.module.ai.entity.AiChatHistory;
 import com.zhubao.manage.module.ai.entity.AIResult;
 import com.zhubao.manage.module.ai.entity.PromptTemplate;
 import com.zhubao.manage.module.ai.gateway.AIGatewayService;
+import com.zhubao.manage.module.ai.mapper.AiChatHistoryMapper;
 import com.zhubao.manage.module.ai.mapper.AIResultMapper;
 import com.zhubao.manage.module.ai.parser.ResultParser;
 import com.zhubao.manage.module.task.entity.TaskInstance;
@@ -31,13 +35,17 @@ public class AIService {
     private final AIResultMapper aiResultMapper;
     private final TaskInstanceMapper taskInstanceMapper;
     private final AIScoreService aiScoreService;
+    private final AsyncAIService asyncAIService;
+    private final AiChatHistoryMapper aiChatHistoryMapper;
 
     public AIService(AIGatewayService gs, DataAssembler da, ResultParser rp,
                      PromptTemplateService pts, AIResultMapper arm,
-                     TaskInstanceMapper tim, AIScoreService ass) {
+                     TaskInstanceMapper tim, AIScoreService ass, AsyncAIService aas,
+                     AiChatHistoryMapper aichm) {
         this.gatewayService = gs; this.dataAssembler = da; this.resultParser = rp;
         this.promptTemplateService = pts; this.aiResultMapper = arm;
         this.taskInstanceMapper = tim; this.aiScoreService = ass;
+        this.asyncAIService = aas; this.aiChatHistoryMapper = aichm;
     }
 
     // ============ AI建议（同步返回，异步执行） ============
@@ -46,69 +54,23 @@ public class AIService {
     public Map<String, Object> getProductAdvice(Long storeId) { return analyze("PRODUCT", storeId); }
     public Map<String, Object> getSceneAdvice(Long storeId) { return analyze("SCENE", storeId); }
 
-    /** 聚合门店建议（人+货+场） */
+    /** 门店综合建议（货+场聚合分析，输出 STORE 类型结果） */
     public Map<String, Object> getStoreAdvice(Long storeId) {
-        Map<String, Object> result = new LinkedHashMap<>();
-        result.put("employee", analyze("EMPLOYEE", storeId));
-        result.put("product", analyze("PRODUCT", storeId));
-        result.put("scene", analyze("SCENE", storeId));
-        return result;
+        return analyze("STORE", storeId);
     }
 
-    /** 通用分析 */
+    /** 通用分析（分析提示词固定用内置默认值，不依赖提示词模板表） */
     public Map<String, Object> analyze(String businessType, Long relatedId) {
-        // 1. 组装数据
         String inputSnapshot = dataAssembler.assemble(businessType, relatedId);
+        String systemPrompt = getDefaultPrompt(businessType);
+        asyncAIService.triggerAsyncAI(businessType, relatedId, null, systemPrompt, inputSnapshot);
 
-        // 2. 查找提示词模板
-        List<PromptTemplate> templates = promptTemplateService.listByBusinessType(businessType);
-        String systemPrompt = templates.isEmpty() ? getDefaultPrompt(businessType) : templates.get(0).getPromptContent();
-        Long templateId = templates.isEmpty() ? null : templates.get(0).getId();
-
-        // 3. 异步调用大模型
-        triggerAsyncAI(businessType, relatedId, templateId, systemPrompt, inputSnapshot);
-
-        // 4. 立即返回（不阻塞）
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("status", "processing");
         result.put("businessType", businessType);
         result.put("relatedId", relatedId);
         result.put("message", "AI分析已触发，结果将写入 ai_result 表");
         return result;
-    }
-
-    /** @Async 异步执行AI调用 */
-    @Async("aiExecutor")
-    @Transactional
-    public void triggerAsyncAI(String businessType, Long relatedId, Long templateId,
-                                String systemPrompt, String inputSnapshot) {
-        try {
-            log.info("AI异步分析开始: type={}, id={}", businessType, relatedId);
-            Map<String, String> response = gatewayService.chat(systemPrompt, inputSnapshot);
-
-            AIResult aiResult = new AIResult();
-            aiResult.setBusinessType(businessType);
-            aiResult.setRelatedId(relatedId);
-            aiResult.setPromptTemplateId(templateId);
-            aiResult.setInputSnapshot(inputSnapshot);
-            aiResult.setOutputText(response.get("outputText"));
-            aiResult.setOutputJson(extractJsonOutput(response.get("outputText")));
-            aiResult.setModelName(gatewayService.getName());
-            aiResult.setTokenUsage(response.get("tokenUsage"));
-            aiResult.setStatus("SUCCESS");
-            aiResultMapper.insert(aiResult);
-
-            log.info("AI异步分析完成: type={}, id={}, aiResultId={}", businessType, relatedId, aiResult.getId());
-        } catch (Exception e) {
-            log.error("AI异步分析失败: type={}, id={}", businessType, relatedId, e);
-            // 失败记录
-            AIResult fail = new AIResult();
-            fail.setBusinessType(businessType); fail.setRelatedId(relatedId);
-            fail.setPromptTemplateId(templateId); fail.setInputSnapshot(inputSnapshot);
-            fail.setOutputText(e.getMessage()); fail.setStatus("FAILED");
-            fail.setModelName(gatewayService.getName());
-            aiResultMapper.insert(fail);
-        }
     }
 
     // ============ AI建议一键转任务 ============
@@ -150,6 +112,70 @@ public class AIService {
                         .orderByDesc(AIResult::getCreatedAt));
     }
 
+    /** AI智能问答（同步调用，失败返回友好错误） */
+    public Map<String, Object> chat(String question) {
+        if (question == null || question.trim().isEmpty()) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "问题不能为空");
+        }
+        String systemPrompt = "你是一位珠宝零售门店管理助手（掌宝通）。请用简洁、专业的中文回答门店经营管理、销售、库存、任务、人事等问题。无法确定的信息请如实说明，不要编造。";
+        try {
+            Map<String, String> response = gatewayService.chat(systemPrompt, question.trim());
+            String reply = response.get("outputText");
+            saveChatHistory(question.trim(), reply);
+            Map<String, Object> result = new LinkedHashMap<>();
+            result.put("reply", reply);
+            result.put("modelName", gatewayService.getName());
+            result.put("tokenUsage", response.get("tokenUsage"));
+            return result;
+        } catch (BusinessException be) {
+            throw be;
+        } catch (Exception e) {
+            log.error("AI问答失败", e);
+            throw new BusinessException(ErrorCode.AI_SERVICE_ERROR, "AI服务暂时不可用，请稍后重试");
+        }
+    }
+
+    /** 保存问答历史 */
+    private void saveChatHistory(String question, String answer) {
+        AiChatHistory h = new AiChatHistory();
+        h.setQuestion(question);
+        h.setAnswer(answer);
+        h.setModelName(gatewayService.getName());
+        aiChatHistoryMapper.insert(h);
+    }
+
+    /** 查询问答历史（最近50条） */
+    public List<AiChatHistory> getChatHistory() {
+        return aiChatHistoryMapper.selectList(
+                new LambdaQueryWrapper<AiChatHistory>()
+                        .orderByDesc(AiChatHistory::getCreatedAt)
+                        .last("LIMIT 50"));
+    }
+
+    /** 清空问答历史 */
+    public void clearChatHistory() {
+        aiChatHistoryMapper.delete(new LambdaQueryWrapper<>());
+    }
+
+    /** 基于提示词模板 + 用户内容生成文档 */
+    public Map<String, Object> generateDoc(Long templateId, String content) {
+        PromptTemplate template = templateId != null ? promptTemplateService.detail(templateId) : null;
+        StringBuilder userPrompt = new StringBuilder();
+        if (template != null && template.getPromptContent() != null && !template.getPromptContent().trim().isEmpty()) {
+            userPrompt.append(template.getPromptContent().trim()).append("\n\n");
+        } else {
+            userPrompt.append("请根据以下内容生成一份专业、结构清晰、可直接使用的文档：\n\n");
+        }
+        userPrompt.append("【用户提供的内容】\n").append(content == null ? "" : content);
+        String systemPrompt = "你是一位专业的中文文档撰写助手。请严格依据模板要求与用户提供的内容，生成条理清晰、格式规范、可直接使用的文档正文。";
+        Map<String, String> response = gatewayService.chat(systemPrompt, userPrompt.toString());
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("content", response.get("outputText"));
+        result.put("modelName", gatewayService.getName());
+        result.put("tokenUsage", response.get("tokenUsage"));
+        return result;
+    }
+
     private String extractJsonOutput(String outputText) {
         Map<String, Object> parsed = resultParser.parseToMap(outputText);
         if (parsed.isEmpty()) return outputText;
@@ -158,11 +184,23 @@ public class AIService {
     }
 
     private String getDefaultPrompt(String businessType) {
+        String schema;
         switch (businessType) {
-            case "EMPLOYEE": return "你是一位珠宝零售行业的人力资源专家。请根据以下员工数据，分析该员工的优势、待提升领域，并给出可操作的建议。以JSON格式输出。";
-            case "PRODUCT": return "你是一位珠宝零售行业的商品运营专家。请根据以下商品数据，分析商品结构、动销情况，并给出运营建议。以JSON格式输出。";
-            case "SCENE": return "你是一位珠宝零售门店运营专家。请根据以下巡检数据，分析门店运营质量，并给出改进建议。以JSON格式输出。";
-            default: return "请分析以下数据并给出建议。以JSON格式输出。";
+            case "EMPLOYEE":
+                schema = "{\"员工优势\":[\"\"],\"待提升领域\":[\"\"],\"可操作建议\":[\"\"]}";
+                return "你是一位珠宝零售行业的人力资源专家。请根据以下员工数据，分析该员工的表现。只输出JSON，不要输出任何其它文字或markdown代码块，格式严格如下：" + schema;
+            case "PRODUCT":
+                schema = "{\"商品结构分析\":\"\",\"动销分析\":\"\",\"运营建议\":[\"\"]}";
+                return "你是一位珠宝零售行业的商品运营专家。请根据以下商品数据，分析商品结构与动销情况。只输出JSON，不要输出任何其它文字或markdown代码块，格式严格如下：" + schema;
+            case "SCENE":
+                schema = "{\"运营质量分析\":\"\",\"存在问题\":[\"\"],\"改进建议\":[\"\"]}";
+                return "你是一位珠宝零售门店运营专家。请根据以下巡检数据，分析门店运营质量。只输出JSON，不要输出任何其它文字或markdown代码块，格式严格如下：" + schema;
+            case "STORE":
+                schema = "{\"门店综合诊断\":\"\",\"核心问题\":[\"\"],\"改进建议\":[\"\"]}";
+                return "你是一位珠宝零售门店综合诊断专家。请根据以下门店的货品与场景巡检数据，给出门店综合诊断。只输出JSON，不要输出任何其它文字或markdown代码块，格式严格如下：" + schema;
+            default:
+                schema = "{\"分析\":\"\",\"建议\":[\"\"]}";
+                return "请分析以下数据并给出建议。只输出JSON，不要输出任何其它文字或markdown代码块，格式严格如下：" + schema;
         }
     }
 }

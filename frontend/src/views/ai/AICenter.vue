@@ -3,7 +3,7 @@
     <!-- 欢迎横幅 -->
     <div class="welcome-banner">
       <div class="welcome-content">
-        <h2>您好，管理员 👋</h2>
+        <h2>您好，{{ welcomeName }} 👋</h2>
         <p>我可以帮你快速处理工作任务，提供智能建议和数据分析，<br />让工作更高效、更轻松。</p>
         <div class="welcome-actions">
           <a-button type="primary" size="large" @click="handleStartChat">
@@ -96,29 +96,59 @@
         <CloseOutlined />
       </a>
     </div>
+
+    <!-- 使用指南弹窗 -->
+    <a-modal v-model:open="guideVisible" title="使用指南" :footer="null" width="640">
+      <div class="guide-content">
+        <div class="guide-item">
+          <div class="guide-title">智能问答</div>
+          <div class="guide-desc">在「智能问答」中输入业务问题，AI 快速给出专业解答，并自动保存到历史记录。</div>
+        </div>
+        <div class="guide-item">
+          <div class="guide-title">智能建议</div>
+          <div class="guide-desc">选择分析类型（员工/货品/场景/门店综合）与分析对象，点击「开始分析」，生成对应建议。</div>
+        </div>
+        <div class="guide-item">
+          <div class="guide-title">数据分析</div>
+          <div class="guide-desc">选择门店与时间范围，生成销售趋势、渠道分布等可视化分析报表。</div>
+        </div>
+        <div class="guide-item">
+          <div class="guide-title">文档生成</div>
+          <div class="guide-desc">选择提示词模板并填写内容要点，AI 生成对应文档。</div>
+        </div>
+      </div>
+    </a-modal>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, markRaw } from 'vue'
+import { ref, computed, markRaw, onMounted, type Component } from 'vue'
 import { useRouter } from 'vue-router'
-import { message } from 'ant-design-vue'
 import {
   MessageOutlined, FileTextOutlined, BarChartOutlined, BulbOutlined,
   RightOutlined, ReloadOutlined, InfoCircleOutlined, CloseOutlined,
   LineChartOutlined, UserOutlined, ShoppingOutlined, PercentageOutlined
 } from '@ant-design/icons-vue'
 import type { AiTool, RecentConversation, RecommendScenario } from '@/types/ai'
-import { mockTools, mockConversations, mockScenarios } from '@/api/ai'
+import { aiApi } from '@/api/ai'
+import { useAuthStore } from '@/stores/useAuthStore'
 
 // 路由
 const router = useRouter()
 
+// 欢迎语用户名（读当前登录用户）
+const authStore = useAuthStore()
+const welcomeName = computed(() => {
+  const info: any = authStore.userInfo
+  return info?.realName || info?.username || '管理员'
+})
+
 // 数据
-const tools = ref<AiTool[]>(mockTools)
-const conversations = ref<RecentConversation[]>(mockConversations)
-const scenarios = ref<RecommendScenario[]>(mockScenarios)
+const tools = ref<AiTool[]>([])
+const conversations = ref<RecentConversation[]>([])
+const scenarios = ref<RecommendScenario[]>([])
 const showNotice = ref(true)
+const guideVisible = ref(false)
 
 // 工具页面路由映射
 const toolRouteMap: Record<string, string> = {
@@ -126,10 +156,15 @@ const toolRouteMap: Record<string, string> = {
   '文档生成': '/ai/doc',
   '数据分析': '/ai/analysis',
   '智能建议': '/ai/suggest',
+  '员工建议': '/ai/suggest',
+  '货品建议': '/ai/suggest',
+  '场景建议': '/ai/suggest',
+  '门店综合建议': '/ai/suggest',
+  '任务评分': '/ai/suggest',
 }
 
-// 图标映射
-const iconMap: Record<string, any> = {
+// 图标与配色映射（UI 展示属性，由前端按工具类型分配）
+const iconMap: Record<string, Component> = {
   MessageOutlined: markRaw(MessageOutlined),
   FileTextOutlined: markRaw(FileTextOutlined),
   BarChartOutlined: markRaw(BarChartOutlined),
@@ -139,21 +174,72 @@ const iconMap: Record<string, any> = {
   ShoppingOutlined: markRaw(ShoppingOutlined),
   PercentageOutlined: markRaw(PercentageOutlined),
 }
+const toolStyleMap: Record<string, { icon: string; color: string }> = {
+  '员工建议': { icon: 'UserOutlined', color: '#1890ff' },
+  '货品建议': { icon: 'ShoppingOutlined', color: '#52c41a' },
+  '场景建议': { icon: 'PercentageOutlined', color: '#fa8c16' },
+  '门店综合建议': { icon: 'BarChartOutlined', color: '#722ed1' },
+  '任务评分': { icon: 'LineChartOutlined', color: '#eb2f96' },
+  '数据分析': { icon: 'LineChartOutlined', color: '#13c2c2' },
+  '文档生成': { icon: 'FileTextOutlined', color: '#13c2c2' },
+}
 
 const getToolIcon = (icon: string) => iconMap[icon] || MessageOutlined
 const getScenarioIcon = (icon: string) => iconMap[icon] || MessageOutlined
 
+// 推荐场景独立静态配置（不复用工具列表）
+const scenarioConfig: RecommendScenario[] = [
+  { id: 'scenario-employee', title: '员工建议', description: 'AI员工画像分析与辅导建议', icon: 'UserOutlined', color: '#1890ff' },
+  { id: 'scenario-product', title: '货品建议', description: 'AI货品运营分析与推荐', icon: 'ShoppingOutlined', color: '#52c41a' },
+  { id: 'scenario-scene', title: '场景建议', description: 'AI场景问题诊断与优化', icon: 'PercentageOutlined', color: '#fa8c16' },
+  { id: 'scenario-store', title: '门店综合建议', description: 'AI门店综合诊断报告', icon: 'BarChartOutlined', color: '#722ed1' },
+  { id: 'scenario-analysis', title: '数据分析', description: 'AI经营数据分析与洞察', icon: 'LineChartOutlined', color: '#eb2f96' },
+]
+
+const shuffle = <T>(arr: T[]): T[] => {
+  const a = [...arr]
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[a[i], a[j]] = [a[j], a[i]]
+  }
+  return a
+}
+
+// 加载真实数据
+const loadData = async () => {
+  try {
+    const list = await aiApi.getTools()
+    tools.value = list.map(t => {
+      const style = toolStyleMap[t.name] || { icon: 'BulbOutlined', color: '#c8a44d' }
+      return { id: t.id, name: t.name, description: t.description, icon: style.icon, color: style.color }
+    })
+  } catch (e) {
+    tools.value = []
+  }
+  scenarios.value = shuffle(scenarioConfig)
+  try {
+    const history = await aiApi.getChatHistory()
+    conversations.value = history.slice(0, 8).map(h => ({
+      id: String(h.id),
+      title: h.question.slice(0, 20),
+      time: (h.createdAt || '').slice(5, 16),
+    }))
+  } catch (e) {
+    conversations.value = []
+  }
+}
+
 // 事件处理
 const handleStartChat = () => {
-  message.info('开始提问功能开发中...')
+  router.push('/ai/chat')
 }
 
 const handleGuide = () => {
-  message.info('使用指南功能开发中...')
+  guideVisible.value = true
 }
 
 const handleToolClick = (tool: AiTool) => {
-  message.info(`打开 ${tool.name}`)
+  handleToolUse(tool)
 }
 
 const handleToolUse = (tool: AiTool) => {
@@ -161,25 +247,30 @@ const handleToolUse = (tool: AiTool) => {
   if (route) {
     router.push(route)
   } else {
-    message.info(`使用 ${tool.name} 功能`)
+    router.push('/ai/chat')
   }
 }
 
 const handleViewAll = () => {
-  message.info('查看全部对话')
+  router.push('/ai/chat')
 }
 
 const handleRefresh = () => {
-  message.info('刷新推荐场景')
+  scenarios.value = shuffle(scenarioConfig)
 }
 
-const handleConversationClick = (item: RecentConversation) => {
-  message.info(`继续对话：${item.title}`)
+const handleConversationClick = (_item: RecentConversation) => {
+  router.push('/ai/chat')
 }
 
 const handleScenarioClick = (item: RecommendScenario) => {
-  message.info(`使用场景：${item.title}`)
+  const route = toolRouteMap[item.title]
+  if (route) router.push(route)
 }
+
+onMounted(() => {
+  loadData()
+})
 </script>
 
 <style scoped>
@@ -541,6 +632,12 @@ const handleScenarioClick = (item: RecommendScenario) => {
 .notice-close:hover {
   color: #333;
 }
+
+/* 使用指南 */
+.guide-content { display: flex; flex-direction: column; gap: 16px; }
+.guide-item { padding: 12px 16px; background: #fafafa; border-radius: 8px; }
+.guide-title { font-size: 14px; font-weight: 600; color: #333; margin-bottom: 4px; }
+.guide-desc { font-size: 13px; color: #666; line-height: 1.7; }
 
 /* 响应式 */
 @media (max-width: 1200px) {

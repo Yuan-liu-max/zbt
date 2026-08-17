@@ -23,10 +23,9 @@
             allow-clear
             style="width: 140px"
           >
-            <a-select-option value="PENDING">待审核</a-select-option>
-            <a-select-option value="APPROVED">已通过</a-select-option>
-            <a-select-option value="REJECTED">已拒绝</a-select-option>
-            <a-select-option value="CANCELLED">已取消</a-select-option>
+            <a-select-option v-for="(val, key) in purchaseStatusMap" :key="key" :value="key">
+              {{ val.text }}
+            </a-select-option>
           </a-select>
         </a-form-item>
         <a-form-item>
@@ -47,12 +46,12 @@
         :pagination="pagination"
         @change="handleTableChange"
         row-key="id"
-        :scroll="{ x: 900 }"
+        :scroll="{ x: 1100 }"
       >
         <template #bodyCell="{ column, record }">
           <!-- 采购单号 -->
-          <template v-if="column.key === 'purchaseNo'">
-            <a @click="handleDetail(record)">{{ record.purchaseNo }}</a>
+          <template v-if="column.key === 'orderNo'">
+            <a @click="handleDetail(record)">{{ record.orderNo }}</a>
           </template>
           <!-- 状态 -->
           <template v-if="column.key === 'status'">
@@ -64,9 +63,21 @@
           <template v-if="column.key === 'action'">
             <a-space :size="4">
               <a @click="handleDetail(record)" class="action-link">详情</a>
-              <template v-if="record.status === 'PENDING'">
+              <template v-if="record.status === 'DRAFT'">
+                <a-divider type="vertical" />
+                <a @click="handleSubmit(record)" class="action-link">提交</a>
+                <a-divider type="vertical" />
+                <a @click="handleCancel(record)" class="action-link">取消</a>
+                <a-divider type="vertical" />
+                <a-popconfirm title="确定要删除该采购单吗？" @confirm="handleDelete(record)">
+                  <a class="action-link danger">删除</a>
+                </a-popconfirm>
+              </template>
+              <template v-if="record.status === 'SUBMITTED'">
                 <a-divider type="vertical" />
                 <a @click="openAuditModal(record)" class="action-link">审核</a>
+                <a-divider type="vertical" />
+                <a @click="handleCancel(record)" class="action-link">取消</a>
               </template>
             </a-space>
           </template>
@@ -77,10 +88,10 @@
     <!-- 详情弹窗 -->
     <a-modal v-model:open="detailVisible" title="采购单详情" :footer="null" width="700px">
       <a-descriptions :column="2" bordered size="small">
-        <a-descriptions-item label="采购单号" :span="2">{{ detailRecord?.purchaseNo }}</a-descriptions-item>
-        <a-descriptions-item label="供应商">{{ detailRecord?.supplierName }}</a-descriptions-item>
-        <a-descriptions-item label="申请人">{{ detailRecord?.applicantName }}</a-descriptions-item>
-        <a-descriptions-item label="申请日期">{{ detailRecord?.applyDate }}</a-descriptions-item>
+        <a-descriptions-item label="采购单号" :span="2">{{ detailRecord?.orderNo }}</a-descriptions-item>
+        <a-descriptions-item label="供应商ID">{{ detailRecord?.supplierId ?? '-' }}</a-descriptions-item>
+        <a-descriptions-item label="申请人ID">{{ detailRecord?.applicantId ?? '-' }}</a-descriptions-item>
+        <a-descriptions-item label="创建时间">{{ detailRecord?.createdAt }}</a-descriptions-item>
         <a-descriptions-item label="状态">
           <a-tag :color="statusColor(detailRecord?.status)">
             {{ statusText(detailRecord?.status) }}
@@ -90,11 +101,6 @@
           <span class="amount-text">¥ {{ (detailRecord?.totalAmount || 0).toFixed(2) }}</span>
         </a-descriptions-item>
         <a-descriptions-item label="备注" :span="2">{{ detailRecord?.remark || '-' }}</a-descriptions-item>
-        <template v-if="detailRecord?.auditRemark">
-          <a-descriptions-item label="审核人">{{ detailRecord?.auditorName || '-' }}</a-descriptions-item>
-          <a-descriptions-item label="审核时间">{{ detailRecord?.auditTime || '-' }}</a-descriptions-item>
-          <a-descriptions-item label="审核意见" :span="2">{{ detailRecord?.auditRemark }}</a-descriptions-item>
-        </template>
       </a-descriptions>
 
       <!-- 商品明细 -->
@@ -118,8 +124,8 @@
       width="500px"
     >
       <div class="audit-info">
-        <p><strong>采购单号：</strong>{{ auditRecord?.purchaseNo }}</p>
-        <p><strong>供应商：</strong>{{ auditRecord?.supplierName }}</p>
+        <p><strong>采购单号：</strong>{{ auditRecord?.orderNo }}</p>
+        <p><strong>供应商ID：</strong>{{ auditRecord?.supplierId ?? '-' }}</p>
         <p><strong>总金额：</strong>¥ {{ (auditRecord?.totalAmount || 0).toFixed(2) }}</p>
       </div>
       <a-form :model="auditForm" :label-col="{ span: 6 }" :wrapper-col="{ span: 16 }">
@@ -148,14 +154,14 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
-import { purchaseApi } from '@/api/purchase'
+import { purchaseApi, purchaseItemApi } from '@/api/purchase'
 import type { PurchaseRecord, PurchaseStatus } from '@/types/purchase'
 import { purchaseStatusMap } from '@/types/purchase'
 
 // 状态映射辅助函数
 const statusText = (status?: PurchaseStatus): string => {
   if (!status) return '-'
-  return purchaseStatusMap[status]?.text || '-'
+  return purchaseStatusMap[status]?.text || status
 }
 
 const statusColor = (status?: PurchaseStatus): string => {
@@ -183,13 +189,13 @@ const pagination = reactive({
 
 // 表格列
 const columns = [
-  { title: '采购单号', dataIndex: 'purchaseNo', key: 'purchaseNo', width: 180 },
-  { title: '供应商', dataIndex: 'supplierName', key: 'supplierName', width: 180 },
-  { title: '申请人', dataIndex: 'applicantName', key: 'applicantName', width: 100 },
-  { title: '申请日期', dataIndex: 'applyDate', key: 'applyDate', width: 120 },
+  { title: '采购单号', dataIndex: 'orderNo', key: 'orderNo', width: 190 },
+  { title: '供应商ID', dataIndex: 'supplierId', key: 'supplierId', width: 100 },
+  { title: '申请人ID', dataIndex: 'applicantId', key: 'applicantId', width: 100 },
+  { title: '创建时间', dataIndex: 'createdAt', key: 'createdAt', width: 170 },
   { title: '总金额', dataIndex: 'totalAmount', key: 'totalAmount', width: 120, align: 'right' as const },
   { title: '状态', dataIndex: 'status', key: 'status', width: 100, align: 'center' as const },
-  { title: '操作', key: 'action', width: 120, fixed: 'right' as const },
+  { title: '操作', key: 'action', width: 200, fixed: 'right' as const },
 ]
 
 // 详情弹窗
@@ -197,11 +203,10 @@ const detailVisible = ref(false)
 const detailRecord = ref<PurchaseRecord | null>(null)
 
 const detailItemColumns = [
+  { title: '商品ID', dataIndex: 'productId', key: 'productId', width: 100 },
   { title: '商品名称', dataIndex: 'productName', key: 'productName' },
-  { title: '规格', dataIndex: 'spec', key: 'spec', width: 120 },
   { title: '数量', dataIndex: 'quantity', key: 'quantity', width: 80, align: 'center' as const },
-  { title: '单价(元)', dataIndex: 'unitPrice', key: 'unitPrice', width: 100, align: 'right' as const },
-  { title: '小计(元)', dataIndex: 'subtotal', key: 'subtotal', width: 100, align: 'right' as const },
+  { title: '单价(元)', dataIndex: 'price', key: 'price', width: 120, align: 'right' as const },
 ]
 
 // 审核弹窗
@@ -227,7 +232,7 @@ const loadData = async () => {
     tableData.value = res.list || []
     pagination.total = res.total || 0
   } catch (error) {
-    message.error('加载数据失败')
+    console.error('加载数据失败', error)
   } finally {
     loading.value = false
   }
@@ -253,15 +258,50 @@ const handleTableChange = (pag: any) => {
   loadData()
 }
 
-// 详情
+// 详情（采购单 + 明细）
 const handleDetail = async (record: PurchaseRecord) => {
   try {
     const detail = await purchaseApi.getById(record.id)
-    detailRecord.value = detail || record
+    detailRecord.value = { ...(detail || record) }
+    const items = await purchaseItemApi.getList(String(record.id))
+    detailRecord.value.items = items || []
     detailVisible.value = true
   } catch {
     detailRecord.value = record
     detailVisible.value = true
+  }
+}
+
+// 提交审核
+const handleSubmit = async (record: PurchaseRecord) => {
+  try {
+    await purchaseApi.submit(record.id)
+    message.success('已提交审核')
+    loadData()
+  } catch (error) {
+    console.error('提交失败', error)
+  }
+}
+
+// 取消
+const handleCancel = async (record: PurchaseRecord) => {
+  try {
+    await purchaseApi.cancel(record.id)
+    message.success('已取消')
+    loadData()
+  } catch (error) {
+    console.error('取消失败', error)
+  }
+}
+
+// 删除
+const handleDelete = async (record: PurchaseRecord) => {
+  try {
+    await purchaseApi.delete(record.id)
+    message.success('删除成功')
+    loadData()
+  } catch (error) {
+    console.error('删除失败', error)
   }
 }
 
@@ -289,7 +329,7 @@ const handleAuditOk = async () => {
     auditVisible.value = false
     loadData()
   } catch (error) {
-    message.error('审核操作失败')
+    console.error('审核操作失败', error)
   } finally {
     auditLoading.value = false
   }
@@ -350,6 +390,10 @@ onMounted(() => {
   font-size: 13px;
 }
 
+.action-link.danger {
+  color: #ff4d4f;
+}
+
 .amount-text {
   font-weight: 700;
   color: #ff4d4f;
@@ -382,7 +426,7 @@ onMounted(() => {
 }
 
 .table-card :deep(.ant-table) {
-  min-width: 800px;
+  min-width: 900px;
 }
 
 /* 响应式 */
@@ -414,7 +458,7 @@ onMounted(() => {
 
   .table-card :deep(.ant-table) {
     font-size: 13px;
-    min-width: 700px;
+    min-width: 900px;
   }
 
   .table-card :deep(.ant-table-thead > tr > th),
@@ -430,7 +474,7 @@ onMounted(() => {
 
   .table-card :deep(.ant-table) {
     font-size: 12px;
-    min-width: 600px;
+    min-width: 800px;
   }
 }
 </style>

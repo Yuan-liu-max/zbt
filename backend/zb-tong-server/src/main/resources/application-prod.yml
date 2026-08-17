@@ -1,0 +1,58 @@
+# 生产环境配置 —— 敏感字段一律通过环境变量注入，不提供默认值
+server:
+  port: 8080
+  servlet:
+    context-path: /api
+
+spring:
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://${DB_HOST:localhost}:3306/zb_tong?useUnicode=true&characterEncoding=utf-8&useSSL=true&serverTimezone=Asia/Shanghai
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+    hikari:
+      minimum-idle: 5
+      maximum-pool-size: 20
+      idle-timeout: 300000
+      max-lifetime: 1200000
+      connection-timeout: 30000
+
+  redis:
+    host: ${REDIS_HOST:localhost}
+    port: 6379
+    password: ${REDIS_PASSWORD}
+    database: 0
+    timeout: 5000ms
+    lettuce:
+      pool:
+        max-active: 8
+        max-idle: 8
+        min-idle: 0
+        max-wait: -1ms
+
+  flyway:
+    enabled: false        # 生产手动初始化，避免种子账号写入
+
+  servlet:
+    multipart:
+      enabled: true
+      max-file-size: 50MB
+      max-request-size: 100MB
+
+knife4j:
+  enable: false           # 关闭 API 文档
+
+jwt:
+  secret: ${JWT_SECRET}   # 生产必须注入，空密钥启动失败
+  expiration: 86400000    # 1天
+  header: Authorization
+  token-prefix: "Bearer "
+
+# Cookie Secure 标志（HTTPS 环境必须开启）
+app:
+  cookie-secure: true
+
+logging:
+  level:
+    root: INFO
+    com.zhubao.manage: INFO   # 关 DEBUG

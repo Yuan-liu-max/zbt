@@ -15,24 +15,14 @@ export type AssessType = 'monthly' | 'quarterly' | 'special'
 // 复盘类型
 export type ReviewType = 'quarterly' | 'monthly' | 'project' | 'activity' | 'iteration'
 
-// 晨夕会
+// 晨夕会（对应 employee_meeting 表）
 export interface MeetingItem {
   id: number
+  topic: string
   meetingType: MeetingType
   meetingDate: string
   host: string
-  participants: number
-  storeTargetAmount: number
-  mainProducts: string
-  keyCustomers: string
-  todayStrategy: string
-  employeeTargets: Record<string, number>
-  meetingPhotoUrls: string[]
-  actualSalesAmount?: number
-  targetCompletionRate?: number
-  successfulCases?: string
-  failedCases?: string
-  tomorrowImprovement?: string
+  participants: string
   status: string
   createdAt: string
 }
@@ -65,6 +55,10 @@ export interface InterviewItem {
 export interface AssessItem {
   id: number
   name: string
+  employeeId: number
+  assessorId: number
+  employeeName?: string
+  assessorName?: string
   assessmentWeek: string
   type: AssessType
   assessor: string
@@ -80,15 +74,23 @@ export interface AssessItem {
   createdAt: string
 }
 
-// 绩效复盘
+// 绩效复盘（对应 employee_monthly_review 表）
 export interface PerformanceItem {
   id: number
-  topic: string
-  type: ReviewType
-  period: string
-  assignee: string
-  participants: number
-  status: string
+  employeeId: number
+  reviewerId: number
+  reviewMonth: string
+  totalSalesAmount: number
+  salesOrderCount: number
+  avgOrderAmount: number
+  newCustomerSales: number
+  oldCustomerRepurchaseSales: number
+  keyCategorySales?: string
+  serviceScore: number
+  taskExecutionScore: number
+  rewardAmount: number
+  penaltyAmount: number
+  managerReview: string
   createdAt: string
 }
 
@@ -99,6 +101,9 @@ export interface HumanQueryParams {
   endDate?: string
   type?: string
   status?: string
+  meetingType?: string
+  assessmentWeek?: string
+  assessorId?: number
   page: number
   pageSize: number
 }

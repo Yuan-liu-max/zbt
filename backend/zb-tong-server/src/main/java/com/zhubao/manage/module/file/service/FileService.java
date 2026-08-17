@@ -162,9 +162,13 @@ public class FileService {
         byte[] expected = MAGIC_NUMBERS.get(ext);
         if (expected == null) return; // 无魔数定义的跳过
 
-        try {
+        try (java.io.InputStream in = file.getInputStream()) {
             byte[] header = new byte[expected.length];
-            file.getInputStream().read(header, 0, expected.length);
+            int read = in.read(header);
+            if (read != expected.length) {
+                throw new BusinessException(ErrorCode.FILE_TYPE_NOT_ALLOWED.getCode(),
+                        "文件类型不匹配，上传被拒绝");
+            }
             for (int i = 0; i < expected.length; i++) {
                 if (header[i] != expected[i]) {
                     log.warn("魔数校验失败: 期望={}, 实际={}", bytesToHex(expected), bytesToHex(header));
@@ -172,9 +176,8 @@ public class FileService {
                             "文件类型不匹配，上传被拒绝");
                 }
             }
-            // 重置流位置
-            file.getInputStream().reset();
         } catch (java.io.IOException e) {
+            log.error("文件读取失败: 文件名={}, 扩展名={}", file.getOriginalFilename(), ext, e);
             throw new BusinessException(400, "文件读取失败");
         }
     }

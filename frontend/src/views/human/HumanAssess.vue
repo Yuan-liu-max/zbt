@@ -27,36 +27,19 @@
             </a-select-option>
           </a-select>
         </a-form-item>
-        <a-form-item label="考核类型">
-          <a-select
-            v-model:value="searchForm.type"
-            placeholder="请选择"
-            allow-clear
-            style="width: 150px"
-          >
-            <a-select-option value="monthly">月度考核</a-select-option>
-            <a-select-option value="quarterly">季度考核</a-select-option>
-            <a-select-option value="special">专项考核</a-select-option>
-          </a-select>
-        </a-form-item>
-        <a-form-item label="状态">
-          <a-select
-            v-model:value="searchForm.status"
-            placeholder="请选择"
-            allow-clear
-            style="width: 120px"
-          >
-            <a-select-option value="ongoing">进行中</a-select-option>
-            <a-select-option value="ended">已结束</a-select-option>
-          </a-select>
-        </a-form-item>
         <a-form-item label="考核人">
-          <a-input
-            v-model:value="searchForm.assessor"
-            placeholder="请输入考核人"
+          <a-select
+            v-model:value="searchForm.assessorId"
+            placeholder="请选择考核人"
             allow-clear
-            style="width: 150px"
-          />
+            show-search
+            :filter-option="filterOption"
+            style="width: 180px"
+          >
+            <a-select-option v-for="item in userOptions" :key="item.id" :value="item.id">
+              {{ item.name }}
+            </a-select-option>
+          </a-select>
         </a-form-item>
         <a-form-item>
           <a-space>
@@ -78,23 +61,24 @@
         :pagination="pagination"
         @change="handleTableChange"
         row-key="id"
-        :scroll="{ x: 900 }"
+        :scroll="{ x: 1000 }"
       >
         <template #bodyCell="{ column, record }">
-          <template v-if="column.key === 'type'">
-            {{ assessTypeMap[record.type] || record.type }}
+          <template v-if="column.key === 'employeeId'">
+            {{ userName(record.employeeId, record.employeeName) }}
           </template>
-          <template v-if="column.key === 'status'">
-            <a-tag :color="assessStatusMap[record.status]?.color">
-              {{ assessStatusMap[record.status]?.text || record.status }}
-            </a-tag>
+          <template v-else-if="column.key === 'assessorId'">
+            {{ userName(record.assessorId, record.assessorName) }}
           </template>
-          <template v-if="column.key === 'action'">
-            <a-space :size="4">
+          <template v-else-if="column.key === 'type'">
+            {{ record.type ? assessTypeMap[record.type as AssessType] : '未设置' }}
+          </template>
+          <template v-else-if="column.key === 'action'">
+            <div class="action-btns">
               <a @click="handleView(record)" class="action-link">查看</a>
               <a-divider type="vertical" />
               <a @click="handleScore(record)" class="action-link">评分</a>
-            </a-space>
+            </div>
           </template>
         </template>
       </a-table>
@@ -115,38 +99,96 @@
         :label-col="{ span: 6 }"
         :wrapper-col="{ span: 16 }"
       >
-        <a-form-item label="考核名称" name="name">
-          <a-input v-model:value="formData.name" placeholder="请输入考核名称" />
+        <a-form-item label="考核员工" name="employeeId">
+          <a-select v-model:value="formData.employeeId" placeholder="请选择被考核员工" allow-clear>
+            <a-select-option v-for="item in userOptions" :key="item.id" :value="item.id">
+              {{ item.name }}
+            </a-select-option>
+          </a-select>
         </a-form-item>
-        <a-form-item label="考核周期" name="period">
-          <a-input v-model:value="formData.assessmentWeek" placeholder="请输入考核周期，如 2026-04-01 ~ 2026-06-30" />
+        <a-form-item label="考核人" name="assessorId">
+          <a-select v-model:value="formData.assessorId" placeholder="请选择考核人" allow-clear>
+            <a-select-option v-for="item in userOptions" :key="item.id" :value="item.id">
+              {{ item.name }}
+            </a-select-option>
+          </a-select>
         </a-form-item>
         <a-form-item label="考核类型" name="type">
-          <a-select v-model:value="formData.type" placeholder="请选择考核类型">
+          <a-select v-model:value="formData.type" placeholder="请选择考核类型" allow-clear>
             <a-select-option value="monthly">月度考核</a-select-option>
             <a-select-option value="quarterly">季度考核</a-select-option>
             <a-select-option value="special">专项考核</a-select-option>
           </a-select>
         </a-form-item>
-        <a-form-item label="考核人" name="assessor">
-          <a-input v-model:value="formData.assessor" placeholder="请输入考核人" />
-        </a-form-item>
-        <a-form-item label="参与人数" name="participants">
-          <a-input-number
-            v-model:value="formData.participants"
-            :min="0"
+        <a-form-item label="考核周期" name="assessmentWeekRange">
+          <a-range-picker
+            v-model:value="formData.assessmentWeekRange"
+            picker="month"
+            value-format="YYYY-MM"
+            :placeholder="['开始月份', '结束月份']"
             style="width: 100%"
-            placeholder="请输入参与人数"
           />
         </a-form-item>
       </a-form>
     </a-modal>
     <a-modal v-model:open="detailVisible" title="详情" :footer="null" width="600px">
       <a-descriptions :column="2" bordered size="small">
-        <a-descriptions-item v-for="(val, key) in detailRecord" :key="key" :label="String(key)" :span="typeof val === 'object' ? 2 : 1">
-          {{ typeof val === 'object' ? JSON.stringify(val) : val }}
-        </a-descriptions-item>
+        <a-descriptions-item label="被考核员工">{{ userName(detailRecord?.employeeId, detailRecord?.employeeName) }}</a-descriptions-item>
+        <a-descriptions-item label="考核人">{{ userName(detailRecord?.assessorId, detailRecord?.assessorName) }}</a-descriptions-item>
+        <a-descriptions-item label="考核周期">{{ detailRecord?.assessmentWeek }}</a-descriptions-item>
+        <a-descriptions-item label="考核类型">{{ detailRecord?.type ? assessTypeMap[detailRecord.type as AssessType] : '未设置' }}</a-descriptions-item>
+        <a-descriptions-item label="商品知识">{{ detailRecord?.productKnowledgeScore ?? 0 }}</a-descriptions-item>
+        <a-descriptions-item label="搭配技巧">{{ detailRecord?.matchingSkillScore ?? 0 }}</a-descriptions-item>
+        <a-descriptions-item label="接待能力">{{ detailRecord?.receptionScore ?? 0 }}</a-descriptions-item>
+        <a-descriptions-item label="异议处理">{{ detailRecord?.objectionHandlingScore ?? 0 }}</a-descriptions-item>
+        <a-descriptions-item label="话术演练">{{ detailRecord?.promotionScriptScore ?? 0 }}</a-descriptions-item>
+        <a-descriptions-item label="总分">{{ detailRecord?.totalScore ?? 0 }}</a-descriptions-item>
+        <a-descriptions-item label="改进建议" :span="2">{{ detailRecord?.improvementAdvice || '-' }}</a-descriptions-item>
       </a-descriptions>
+    </a-modal>
+
+    <!-- 5维度评分弹窗 -->
+    <a-modal v-model:open="scoreVisible" title="能力评分" @ok="handleScoreOk" width="560px">
+      <div class="score-record" v-if="scoreRecord">
+        <span class="score-record-name">员工：{{ userName(scoreRecord.employeeId, scoreRecord.employeeName) }}</span>
+        <span class="score-record-week">{{ scoreRecord.assessmentWeek }}</span>
+      </div>
+      <a-form :label-col="{ span: 6 }" :wrapper-col="{ span: 16 }">
+        <a-form-item label="考核类型">
+          <a-select v-model:value="scoreForm.type" placeholder="请选择考核类型">
+            <a-select-option v-for="(text, value) in assessTypeMap" :key="value" :value="value">
+              {{ text }}
+            </a-select-option>
+          </a-select>
+        </a-form-item>
+        <a-form-item label="商品知识">
+          <a-input-number v-model:value="scoreForm.productKnowledge" :min="0" :max="25" style="width: 100%" />
+        </a-form-item>
+        <a-form-item label="搭配技巧">
+          <a-input-number v-model:value="scoreForm.matchingSkill" :min="0" :max="20" style="width: 100%" />
+        </a-form-item>
+        <a-form-item label="接待能力">
+          <a-input-number v-model:value="scoreForm.reception" :min="0" :max="20" style="width: 100%" />
+        </a-form-item>
+        <a-form-item label="异议处理">
+          <a-input-number v-model:value="scoreForm.objectionHandling" :min="0" :max="20" style="width: 100%" />
+        </a-form-item>
+        <a-form-item label="话术演练">
+          <a-input-number v-model:value="scoreForm.promotionScript" :min="0" :max="15" style="width: 100%" />
+        </a-form-item>
+        <a-form-item label="总分">
+          <span class="score-total">{{ totalScore }}</span>
+        </a-form-item>
+        <a-form-item label="改进建议">
+          <a-textarea
+            v-model:value="scoreForm.improvementAdvice"
+            placeholder="请输入改进建议"
+            :rows="3"
+            :maxlength="500"
+            show-count
+          />
+        </a-form-item>
+      </a-form>
     </a-modal>
   </div>
 </template>
@@ -157,123 +199,111 @@ import { message } from 'ant-design-vue'
 import { PlusOutlined, SearchOutlined } from '@ant-design/icons-vue'
 import type { AssessItem, AssessType } from '@/types/human'
 import { assessApi } from '@/api/human'
+import { userApi } from '@/api/system'
+import { useCrudTable } from '@/composables/useCrudTable'
+import { useDetailModal } from '@/composables/useDetailModal'
 
-// 考核状态映射（本地定义）
-const assessStatusMap: Record<string, { text: string; color: string }> = {
-  ongoing: { text: '进行中', color: 'green' },
-  ended: { text: '已结束', color: 'default' },
+// 员工/考核人下拉（真实用户列表）
+const userOptions = ref<{ id: number; name: string }[]>([])
+const loadUsers = async () => {
+  try {
+    const res = await userApi.getList({ page: 1, pageSize: 999 })
+    userOptions.value = res.list.map((u) => ({ id: Number(u.id), name: u.realName || u.username }))
+  } catch {}
 }
 
-// 考核类型映射
-const assessTypeMap: Record<string, string> = {
+// 用户 ID -> 姓名（用于表格列 / 详情 / 评分弹窗显示）
+const userName = (id?: number | null, name?: string | null) => {
+  if (name) return name
+  if (id == null) return '-'
+  const u = userOptions.value.find((o) => o.id === id)
+  return u ? u.name : String(id)
+}
+
+const filterOption = (input: string, option: any) => {
+  return String(option?.label || '').toLowerCase().includes(input.toLowerCase())
+}
+
+// 考核类型文案
+const assessTypeMap: Record<AssessType, string> = {
   monthly: '月度考核',
   quarterly: '季度考核',
-  special: '专项考核'
+  special: '专项考核',
 }
 
-// 考核周期选项
-const periodOptions = [
-  { label: '2026-Q2 (04~06月)', value: '2026-Q2' },
-  { label: '2026-Q1 (01~03月)', value: '2026-Q1' },
-  { label: '2026年6月', value: '2026-06' },
-  { label: '2026年5月', value: '2026-05' },
-  { label: '2026年4月', value: '2026-04' }
-]
+// 考核周期选项：动态生成当前年份前后 1 年的月份列表
+const periodOptions = (() => {
+  const now = new Date()
+  const startYear = now.getFullYear() - 1
+  const endYear = now.getFullYear() + 1
+  const options: { label: string; value: string }[] = []
+  for (let y = startYear; y <= endYear; y++) {
+    for (let m = 1; m <= 12; m++) {
+      const value = `${y}-${String(m).padStart(2, '0')}`
+      options.push({ label: `${y}年${m}月`, value })
+    }
+  }
+  return options
+})()
 
 // 搜索表单
 const searchForm = reactive({
   assessmentWeek: undefined as string | undefined,
-  type: undefined as AssessType | undefined,
-  status: undefined as string | undefined,
-  assessor: ''
+  assessorId: undefined as number | undefined
 })
 
 // 表格数据
-const tableData = ref<AssessItem[]>([])
-const loading = ref(false)
-const pagination = reactive({
-  current: 1,
-  pageSize: 10,
-  total: 0,
-  showSizeChanger: true,
-  showQuickJumper: true,
-  showTotal: (total: number) => `共 ${total} 条`
+const { tableData, loading, pagination, loadData, handleSearch, handleTableChange } = useCrudTable<any, typeof searchForm>({
+  searchForm,
+  loadFn: (params) => assessApi.getList({
+    assessmentWeek: params.assessmentWeek || undefined,
+    assessorId: params.assessorId || undefined,
+    page: params.page,
+    pageSize: params.pageSize,
+  }),
 })
 
 // 表格列配置
 const columns = [
-  { title: '考核名称', dataIndex: 'name', key: 'name', width: 200 },
-  { title: '考核周期', dataIndex: 'period', key: 'period', width: 220 },
+  { title: '被考核员工', dataIndex: 'employeeId', key: 'employeeId', width: 110 },
   { title: '考核类型', dataIndex: 'type', key: 'type', width: 100, align: 'center' as const },
-  { title: '考核人', dataIndex: 'assessor', key: 'assessor', width: 100 },
-  { title: '参与人数', dataIndex: 'participants', key: 'participants', width: 90, align: 'center' as const },
-  { title: '状态', dataIndex: 'status', key: 'status', width: 90, align: 'center' as const },
+  { title: '考核周期', dataIndex: 'assessmentWeek', key: 'assessmentWeek', width: 200 },
+  { title: '考核人', dataIndex: 'assessorId', key: 'assessorId', width: 110 },
+  { title: '商品知识', dataIndex: 'productKnowledgeScore', key: 'productKnowledgeScore', width: 90, align: 'center' as const },
+  { title: '搭配技巧', dataIndex: 'matchingSkillScore', key: 'matchingSkillScore', width: 90, align: 'center' as const },
+  { title: '接待能力', dataIndex: 'receptionScore', key: 'receptionScore', width: 90, align: 'center' as const },
+  { title: '异议处理', dataIndex: 'objectionHandlingScore', key: 'objectionHandlingScore', width: 90, align: 'center' as const },
+  { title: '话术演练', dataIndex: 'promotionScriptScore', key: 'promotionScriptScore', width: 90, align: 'center' as const },
+  { title: '总分', dataIndex: 'totalScore', key: 'totalScore', width: 90, align: 'center' as const },
   { title: '操作', key: 'action', width: 120, fixed: 'right' as const }
 ]
 
 // 详情弹窗
-const detailVisible = ref(false)
-const detailRecord = ref<any>(null)
+const { detailVisible, detailRecord, openDetail } = useDetailModal<AssessItem>()
 
 // 弹窗相关
 const modalVisible = ref(false)
 const modalLoading = ref(false)
 const formRef = ref()
 const formData = reactive({
-  name: '',
-  assessmentWeek: '',
+  employeeId: undefined as number | undefined,
+  assessorId: undefined as number | undefined,
   type: 'monthly' as AssessType,
-  assessor: '',
-  participants: 0
+  assessmentWeekRange: null as [string, string] | null
 })
 
 const formRules = {
-  name: [{ required: true, message: '请输入考核名称', trigger: 'blur' }],
-  period: [{ required: true, message: '请输入考核周期', trigger: 'blur' }],
+  employeeId: [{ required: true, message: '请选择被考核员工', trigger: 'change' }],
+  assessorId: [{ required: true, message: '请选择考核人', trigger: 'change' }],
   type: [{ required: true, message: '请选择考核类型', trigger: 'change' }],
-  assessor: [{ required: true, message: '请输入考核人', trigger: 'blur' }],
-  participants: [{ required: true, message: '请输入参与人数', trigger: 'blur' }]
-}
-
-// 加载数据
-const loadData = async () => {
-  loading.value = true
-  try {
-    const params = {
-      keyword: searchForm.assessor || undefined,
-      page: pagination.current,
-      pageSize: pagination.pageSize
-    }
-    const res = await assessApi.getList(params)
-    tableData.value = res.list
-    loadData()
-  } catch (error) {
-    message.error('加载数据失败')
-  } finally {
-    loading.value = false
-  }
-}
-
-// 前端筛选
-const handleSearch = () => {
-  pagination.current = 1
-  loadData()
+  assessmentWeekRange: [{ required: true, message: '请选择考核周期', trigger: 'change' }]
 }
 
 // 重置
 const handleReset = () => {
   searchForm.assessmentWeek = undefined
-  searchForm.type = undefined
-  searchForm.status = undefined
-  searchForm.assessor = ''
+  searchForm.assessorId = undefined
   pagination.current = 1
-  loadData()
-}
-
-// 分页
-const handleTableChange = (pag: any) => {
-  pagination.current = pag.current
-  pagination.pageSize = pag.pageSize
   loadData()
 }
 
@@ -285,19 +315,20 @@ const handleAdd = () => {
 
 // 查看
 const handleView = (record: AssessItem) => {
-  detailRecord.value = record
-  detailVisible.value = true
+  openDetail(record)
 }
 
 // 5维度评分弹窗
 const scoreVisible = ref(false)
 const scoreRecord = ref<AssessItem | null>(null)
 const scoreForm = reactive({
+  type: 'monthly' as AssessType,
   productKnowledge: 0,
   matchingSkill: 0,
   reception: 0,
   objectionHandling: 0,
-  promotionScript: 0
+  promotionScript: 0,
+  improvementAdvice: ''
 })
 const totalScore = computed(() => {
   return scoreForm.productKnowledge + scoreForm.matchingSkill +
@@ -306,23 +337,27 @@ const totalScore = computed(() => {
 
 const handleScore = (item: AssessItem) => {
   scoreRecord.value = item
+  scoreForm.type = item.type || 'monthly'
   scoreForm.productKnowledge = 0
   scoreForm.matchingSkill = 0
   scoreForm.reception = 0
   scoreForm.objectionHandling = 0
   scoreForm.promotionScript = 0
+  scoreForm.improvementAdvice = ''
   scoreVisible.value = true
 }
 
 const handleScoreOk = async () => {
   try {
-    await assessApi.update(scoreRecord.value!.id, {
+    await assessApi.update(String(scoreRecord.value!.id), {
+      type: scoreForm.type,
       productKnowledgeScore: scoreForm.productKnowledge,
       matchingSkillScore: scoreForm.matchingSkill,
       receptionScore: scoreForm.reception,
       objectionHandlingScore: scoreForm.objectionHandling,
       promotionScriptScore: scoreForm.promotionScript,
-      totalScore: totalScore.value
+      totalScore: totalScore.value,
+      improvementAdvice: scoreForm.improvementAdvice
     })
     message.success('评分已提交')
     scoreVisible.value = false
@@ -337,11 +372,10 @@ const handleModalOk = async () => {
     modalLoading.value = true
 
     await assessApi.create({
-      name: formData.name,
-      assessmentWeek: formData.assessmentWeek,
+      employeeId: formData.employeeId,
+      assessorId: formData.assessorId,
       type: formData.type,
-      assessor: formData.assessor,
-      participants: formData.participants
+      assessmentWeek: formData.assessmentWeekRange ? formData.assessmentWeekRange.join(' ~ ') : ''
     })
 
     message.success('新建成功')
@@ -356,14 +390,14 @@ const handleModalOk = async () => {
 
 // 重置表单
 const resetForm = () => {
-  formData.name = ''
-  formData.assessmentWeek = ''
+  formData.employeeId = undefined
+  formData.assessorId = undefined
   formData.type = 'monthly'
-  formData.assessor = ''
-  formData.participants = 0
+  formData.assessmentWeekRange = null
 }
 
 onMounted(() => {
+  loadUsers()
   loadData()
 })
 </script>
@@ -428,13 +462,50 @@ onMounted(() => {
   background: #e6f7ff;
 }
 
+.action-btns {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  white-space: nowrap;
+}
+
+.action-btns :deep(.ant-divider-vertical) {
+  margin: 0 2px;
+}
+
+.score-record {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  background: #fafafa;
+  border-radius: 6px;
+}
+
+.score-record-name {
+  font-weight: 600;
+  color: #333;
+}
+
+.score-record-week {
+  font-size: 13px;
+  color: #999;
+}
+
+.score-total {
+  font-size: 18px;
+  font-weight: 600;
+  color: #ff4d4f;
+}
+
 /* 表格横向滚动 */
 .table-card :deep(.ant-table-wrapper) {
   overflow-x: auto;
 }
 
 .table-card :deep(.ant-table) {
-  min-width: 800px;
+  min-width: 900px;
 }
 
 /* 响应式 */

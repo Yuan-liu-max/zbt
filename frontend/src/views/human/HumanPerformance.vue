@@ -12,25 +12,17 @@
     <div class="content-card search-card">
       <a-form layout="inline" :model="searchForm" @finish="handleSearch">
         <a-form-item label="复盘周期">
-          <a-input v-model:value="searchForm.period" placeholder="请输入复盘周期" allow-clear style="width: 200px" />
+          <a-date-picker
+            v-model:value="searchForm.period"
+            picker="month"
+            value-format="YYYY-MM"
+            placeholder="请选择复盘月份"
+            allow-clear
+            style="width: 150px"
+          />
         </a-form-item>
-        <a-form-item label="复盘类型">
-          <a-select v-model:value="searchForm.type" placeholder="全部" allow-clear style="width: 130px">
-            <a-select-option value="quarterly">季度复盘</a-select-option>
-            <a-select-option value="monthly">月度复盘</a-select-option>
-            <a-select-option value="project">项目复盘</a-select-option>
-            <a-select-option value="activity">活动复盘</a-select-option>
-            <a-select-option value="iteration">迭代复盘</a-select-option>
-          </a-select>
-        </a-form-item>
-        <a-form-item label="状态">
-          <a-select v-model:value="searchForm.status" placeholder="全部" allow-clear style="width: 120px">
-            <a-select-option value="ongoing">进行中</a-select-option>
-            <a-select-option value="completed">已完成</a-select-option>
-          </a-select>
-        </a-form-item>
-        <a-form-item label="负责人">
-          <a-input v-model:value="searchForm.assignee" placeholder="请输入负责人" allow-clear style="width: 130px" />
+        <a-form-item label="关键词">
+          <a-input v-model:value="searchForm.keyword" placeholder="搜索经理评语" allow-clear style="width: 150px" />
         </a-form-item>
         <a-form-item>
           <a-space>
@@ -53,52 +45,94 @@
         :scroll="{ x: 800 }"
       >
         <template #bodyCell="{ column, record }">
-          <template v-if="column.key === 'status'">
-            <a-tag :color="performanceStatusMap[record.status]?.color">
-              {{ performanceStatusMap[record.status]?.text }}
-            </a-tag>
+          <template v-if="column.key === 'employeeId'">
+            {{ userName(record.employeeId) }}
           </template>
-          <template v-if="column.key === 'action'">
-            <a-space :size="4">
+          <template v-else-if="column.key === 'reviewerId'">
+            {{ userName(record.reviewerId) }}
+          </template>
+          <template v-else-if="column.key === 'action'">
+            <div class="action-btns">
               <a @click="handleView(record)" class="action-link">查看</a>
-              <a @click="handleReport(record)" class="action-link">报告</a>
-            </a-space>
+            </div>
           </template>
         </template>
       </a-table>
     </div>
 
     <!-- 新建复盘弹窗 -->
-    <a-modal v-model:open="modalVisible" title="新建复盘" @ok="handleModalOk" :confirm-loading="modalLoading" width="500px">
-      <a-form ref="formRef" :model="formData" :rules="formRules" :label-col="{ span: 6 }" :wrapper-col="{ span: 16 }">
-        <a-form-item label="复盘主题" name="topic">
-          <a-input v-model:value="formData.topic" placeholder="请输入复盘主题" />
-        </a-form-item>
-        <a-form-item label="复盘类型" name="type">
-          <a-select v-model:value="formData.type" placeholder="请选择复盘类型">
-            <a-select-option value="quarterly">季度复盘</a-select-option>
-            <a-select-option value="monthly">月度复盘</a-select-option>
-            <a-select-option value="project">项目复盘</a-select-option>
-            <a-select-option value="activity">活动复盘</a-select-option>
-            <a-select-option value="iteration">迭代复盘</a-select-option>
+    <a-modal v-model:open="modalVisible" title="新建复盘" @ok="handleModalOk" :confirm-loading="modalLoading" width="600px">
+      <a-form ref="formRef" :model="formData" :rules="formRules" :label-col="{ span: 8 }" :wrapper-col="{ span: 14 }">
+        <a-form-item label="被复盘员工" name="employeeId">
+          <a-select v-model:value="formData.employeeId" placeholder="请选择被复盘员工" allow-clear show-search :filter-option="filterOption">
+            <a-select-option v-for="item in userOptions" :key="item.id" :value="item.id">
+              {{ item.name }}
+            </a-select-option>
           </a-select>
         </a-form-item>
-        <a-form-item label="复盘周期" name="period">
-          <a-input v-model:value="formData.period" placeholder="请输入复盘周期，如：2026-04-01 ~ 2026-06-30" />
+        <a-form-item label="复盘人" name="reviewerId">
+          <a-select v-model:value="formData.reviewerId" placeholder="请选择复盘人" allow-clear show-search :filter-option="filterOption">
+            <a-select-option v-for="item in userOptions" :key="item.id" :value="item.id">
+              {{ item.name }}
+            </a-select-option>
+          </a-select>
         </a-form-item>
-        <a-form-item label="负责人" name="assignee">
-          <a-input v-model:value="formData.assignee" placeholder="请输入负责人" />
+        <a-form-item label="复盘周期" name="reviewMonth">
+          <a-date-picker
+            v-model:value="formData.reviewMonth"
+            picker="month"
+            value-format="YYYY-MM"
+            placeholder="请选择复盘月份"
+            style="width: 100%"
+          />
         </a-form-item>
-        <a-form-item label="参与人数" name="participants">
-          <a-input-number v-model:value="formData.participants" :min="0" style="width: 100%" />
+        <a-form-item label="销售总额">
+          <a-input-number v-model:value="formData.totalSalesAmount" :min="0" :precision="2" style="width: 100%" />
+        </a-form-item>
+        <a-form-item label="订单数">
+          <a-input-number v-model:value="formData.salesOrderCount" :min="0" :precision="0" style="width: 100%" />
+        </a-form-item>
+        <a-form-item label="客单价">
+          <a-input-number v-model:value="formData.avgOrderAmount" :min="0" :precision="2" style="width: 100%" />
+        </a-form-item>
+        <a-form-item label="新客销售额">
+          <a-input-number v-model:value="formData.newCustomerSales" :min="0" :precision="2" style="width: 100%" />
+        </a-form-item>
+        <a-form-item label="老客复购额">
+          <a-input-number v-model:value="formData.oldCustomerRepurchaseSales" :min="0" :precision="2" style="width: 100%" />
+        </a-form-item>
+        <a-form-item label="服务评分">
+          <a-input-number v-model:value="formData.serviceScore" :min="0" :max="100" :precision="2" style="width: 100%" />
+        </a-form-item>
+        <a-form-item label="任务执行分">
+          <a-input-number v-model:value="formData.taskExecutionScore" :min="0" :max="100" :precision="2" style="width: 100%" />
+        </a-form-item>
+        <a-form-item label="奖励金额">
+          <a-input-number v-model:value="formData.rewardAmount" :min="0" :precision="2" style="width: 100%" />
+        </a-form-item>
+        <a-form-item label="处罚金额">
+          <a-input-number v-model:value="formData.penaltyAmount" :min="0" :precision="2" style="width: 100%" />
+        </a-form-item>
+        <a-form-item label="经理评语" name="managerReview" class="form-item-full">
+          <a-textarea v-model:value="formData.managerReview" :rows="3" placeholder="请输入经理评语" :maxlength="500" show-count />
         </a-form-item>
       </a-form>
     </a-modal>
-    <a-modal v-model:open="detailVisible" title="详情" :footer="null" width="600px">
+    <a-modal v-model:open="detailVisible" title="详情" :footer="null" width="700px">
       <a-descriptions :column="2" bordered size="small">
-        <a-descriptions-item v-for="(val, key) in detailRecord" :key="key" :label="String(key)" :span="typeof val === 'object' ? 2 : 1">
-          {{ typeof val === 'object' ? JSON.stringify(val) : val }}
-        </a-descriptions-item>
+        <a-descriptions-item label="被复盘员工">{{ userName(detailRecord?.employeeId) }}</a-descriptions-item>
+        <a-descriptions-item label="复盘人">{{ userName(detailRecord?.reviewerId) }}</a-descriptions-item>
+        <a-descriptions-item label="复盘周期">{{ detailRecord?.reviewMonth }}</a-descriptions-item>
+        <a-descriptions-item label="销售总额">¥{{ detailRecord?.totalSalesAmount ?? 0 }}</a-descriptions-item>
+        <a-descriptions-item label="订单数">{{ detailRecord?.salesOrderCount ?? 0 }}</a-descriptions-item>
+        <a-descriptions-item label="客单价">¥{{ detailRecord?.avgOrderAmount ?? 0 }}</a-descriptions-item>
+        <a-descriptions-item label="新客销售额">¥{{ detailRecord?.newCustomerSales ?? 0 }}</a-descriptions-item>
+        <a-descriptions-item label="老客复购额">¥{{ detailRecord?.oldCustomerRepurchaseSales ?? 0 }}</a-descriptions-item>
+        <a-descriptions-item label="服务评分">{{ detailRecord?.serviceScore ?? 0 }}</a-descriptions-item>
+        <a-descriptions-item label="任务执行分">{{ detailRecord?.taskExecutionScore ?? 0 }}</a-descriptions-item>
+        <a-descriptions-item label="奖励金额">¥{{ detailRecord?.rewardAmount ?? 0 }}</a-descriptions-item>
+        <a-descriptions-item label="处罚金额">¥{{ detailRecord?.penaltyAmount ?? 0 }}</a-descriptions-item>
+        <a-descriptions-item label="经理评语" :span="2">{{ detailRecord?.managerReview || '-' }}</a-descriptions-item>
       </a-descriptions>
     </a-modal>
   </div>
@@ -106,95 +140,131 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
-import request from '@/utils/request'
 import { message } from 'ant-design-vue'
 import { PlusOutlined, SearchOutlined } from '@ant-design/icons-vue'
-import type { PerformanceItem, HumanQueryParams, ReviewType } from '@/types/human'
-import { performanceApi, performanceStatusMap } from '@/api/human'
+import type { PerformanceItem } from '@/types/human'
+import { performanceApi } from '@/api/human'
+import { userApi } from '@/api/system'
+import { useCrudTable } from '@/composables/useCrudTable'
+import { useDetailModal } from '@/composables/useDetailModal'
 
-// 搜索表单
+// 员工下拉（真实用户列表）
+const userOptions = ref<{ id: number; name: string }[]>([])
+// 用户 ID 映射为人名（找不到时回退显示 ID）
+const userName = (id: number | undefined) => {
+  if (!id) return '-'
+  const u = userOptions.value.find((item) => item.id === Number(id))
+  return u ? u.name : `用户#${id}`
+}
+const filterOption = (input: string, option: any) => {
+  return String(option?.label || '').toLowerCase().includes(input.toLowerCase())
+}
+const loadUsers = async () => {
+  try {
+    const res = await userApi.getList({ page: 1, pageSize: 999 })
+    userOptions.value = res.list.map((u) => ({ id: Number(u.id), name: u.realName || u.username }))
+  } catch {}
+}
+
+// 搜索表单：period → status 参数（后端用 status 过滤 reviewMonth）；keyword → 搜索经理评语
 const searchForm = reactive({
-  period: '',
-  type: undefined as ReviewType | undefined,
-  status: undefined as string | undefined,
-  assignee: ''
+  period: null as string | null,
+  keyword: ''
 })
 
 // 表格数据
-const tableData = ref<PerformanceItem[]>([])
-const loading = ref(false)
-const pagination = reactive({ current: 1, pageSize: 10, total: 0, showSizeChanger: true, showQuickJumper: true, showTotal: (total: number) => `共 ${total} 条` })
+const { tableData, loading, pagination, loadData, handleSearch, handleTableChange } = useCrudTable<any, typeof searchForm>({
+  searchForm,
+  loadFn: (params) => performanceApi.getList({
+    keyword: params.keyword || undefined,
+    status: params.period || undefined,
+    page: params.page,
+    pageSize: params.pageSize,
+  }),
+})
 
 // 表格列配置
 const columns = [
-  { title: '复盘主题', dataIndex: 'topic', key: 'topic', width: 180 },
-  { title: '复盘类型', dataIndex: 'type', key: 'type', width: 100 },
-  { title: '复盘周期', dataIndex: 'period', key: 'period', width: 200 },
-  { title: '负责人', dataIndex: 'assignee', key: 'assignee', width: 100 },
-  { title: '参与人数', dataIndex: 'participants', key: 'participants', width: 90, align: 'center' as const },
-  { title: '状态', dataIndex: 'status', key: 'status', width: 90, align: 'center' as const },
-  { title: '操作', key: 'action', width: 120, fixed: 'right' as const }
+  { title: '经理评语', dataIndex: 'managerReview', key: 'managerReview', width: 200, ellipsis: true },
+  { title: '复盘周期', dataIndex: 'reviewMonth', key: 'reviewMonth', width: 110 },
+  { title: '被复盘员工', key: 'employeeId', width: 110 },
+  { title: '复盘人', key: 'reviewerId', width: 110 },
+  { title: '销售总额', dataIndex: 'totalSalesAmount', key: 'totalSalesAmount', width: 110 },
+  { title: '订单数', dataIndex: 'salesOrderCount', key: 'salesOrderCount', width: 80, align: 'center' as const },
+  { title: '操作', key: 'action', width: 90, fixed: 'right' as const }
 ]
 
 // 详情弹窗
-const detailVisible = ref(false)
-const detailRecord = ref<any>(null)
+const { detailVisible, detailRecord, openDetail } = useDetailModal<PerformanceItem>()
 
 // 弹窗相关
 const modalVisible = ref(false)
 const modalLoading = ref(false)
 const formRef = ref()
-const formData = reactive({ topic: '', type: undefined as ReviewType | undefined, period: '', assignee: '', participants: 0 })
+const formData = reactive({
+  employeeId: undefined as number | undefined,
+  reviewerId: undefined as number | undefined,
+  reviewMonth: null as string | null,
+  totalSalesAmount: 0,
+  salesOrderCount: 0,
+  avgOrderAmount: 0,
+  newCustomerSales: 0,
+  oldCustomerRepurchaseSales: 0,
+  serviceScore: 0,
+  taskExecutionScore: 0,
+  rewardAmount: 0,
+  penaltyAmount: 0,
+  managerReview: ''
+})
 const formRules = {
-  topic: [{ required: true, message: '请输入复盘主题', trigger: 'blur' }],
-  type: [{ required: true, message: '请选择复盘类型', trigger: 'change' }],
-  assignee: [{ required: true, message: '请输入负责人', trigger: 'blur' }]
+  employeeId: [{ required: true, message: '请选择被复盘员工', trigger: 'change' }],
+  reviewerId: [{ required: true, message: '请选择复盘人', trigger: 'change' }],
+  reviewMonth: [{ required: true, message: '请选择复盘周期', trigger: 'change' }],
+  managerReview: [{ required: true, message: '请输入经理评语', trigger: 'blur' }]
 }
 
-// 加载数据
-const loadData = async () => {
-  loading.value = true
-  try {
-    const params: HumanQueryParams = {
-      keyword: searchForm.assignee || undefined,
-      type: searchForm.type,
-      status: searchForm.status,
-      page: pagination.current, pageSize: pagination.pageSize
-    }
-    const res = await performanceApi.getList(params)
-    tableData.value = res.list; pagination.total = res.total
-  } catch { message.error('加载数据失败') } finally { loading.value = false }
-}
-
-const handleSearch = () => { pagination.current = 1; loadData() }
-const handleReset = () => { searchForm.period = ''; searchForm.type = undefined; searchForm.status = undefined; searchForm.assignee = ''; handleSearch() }
-const handleTableChange = (pag: any) => { pagination.current = pag.current; pagination.pageSize = pag.pageSize; loadData() }
+const handleReset = () => { searchForm.period = null; searchForm.keyword = ''; handleSearch() }
 const handleAdd = () => { resetForm(); modalVisible.value = true }
-const handleView = (record: PerformanceItem) => { detailRecord.value = record; detailVisible.value = true }
-// TODO: 报告功能待实现（需要单独的报告详情页）
-const reportVisible = ref(false)
-const reportData = ref<any>(null)
-
-const handleReport = async (_record: PerformanceItem) => {
-  try {
-    const data = await request.get(`/sales/metrics/employee/${record.id}?month=2024-05`)
-    reportData.value = data
-    reportVisible.value = true
-  } catch {
-    message.info('报告功能开发中...')
-  }
-}
+const handleView = (record: PerformanceItem) => { openDetail(record) }
 
 const handleModalOk = async () => {
   try {
     await formRef.value?.validateFields(); modalLoading.value = true
-    await performanceApi.create({ topic: formData.topic, type: formData.type, period: formData.period, assignee: formData.assignee, participants: formData.participants })
+    await performanceApi.create({
+      employeeId: formData.employeeId,
+      reviewerId: formData.reviewerId,
+      reviewMonth: formData.reviewMonth ?? '',
+      totalSalesAmount: formData.totalSalesAmount,
+      salesOrderCount: formData.salesOrderCount,
+      avgOrderAmount: formData.avgOrderAmount,
+      newCustomerSales: formData.newCustomerSales,
+      oldCustomerRepurchaseSales: formData.oldCustomerRepurchaseSales,
+      serviceScore: formData.serviceScore,
+      taskExecutionScore: formData.taskExecutionScore,
+      rewardAmount: formData.rewardAmount,
+      penaltyAmount: formData.penaltyAmount,
+      managerReview: formData.managerReview,
+    })
     message.success('创建成功'); modalVisible.value = false; loadData()
   } catch { console.error('表单验证失败') } finally { modalLoading.value = false }
 }
 
-const resetForm = () => { formData.topic = ''; formData.type = undefined; formData.period = ''; formData.assignee = ''; formData.participants = 0 }
-onMounted(() => { loadData() })
+const resetForm = () => {
+  formData.employeeId = undefined
+  formData.reviewerId = undefined
+  formData.reviewMonth = null
+  formData.totalSalesAmount = 0
+  formData.salesOrderCount = 0
+  formData.avgOrderAmount = 0
+  formData.newCustomerSales = 0
+  formData.oldCustomerRepurchaseSales = 0
+  formData.serviceScore = 0
+  formData.taskExecutionScore = 0
+  formData.rewardAmount = 0
+  formData.penaltyAmount = 0
+  formData.managerReview = ''
+}
+onMounted(() => { loadUsers(); loadData() })
 </script>
 
 <style scoped>
@@ -208,8 +278,11 @@ onMounted(() => { loadData() })
 .search-card :deep(.ant-form-item) { margin-bottom: 12px; margin-right: 0; }
 .action-link { font-size: 13px; color: #1890ff; padding: 2px 6px; border-radius: 4px; transition: all 0.2s; cursor: pointer; }
 .action-link:hover { color: #40a9ff; background: #e6f7ff; }
+.action-btns { display: flex; align-items: center; gap: 2px; white-space: nowrap; }
+.action-btns :deep(.ant-divider-vertical) { margin: 0 2px; }
+.form-item-full { grid-column: 1 / -1; }
 .table-card :deep(.ant-table-wrapper) { overflow-x: auto; }
-.table-card :deep(.ant-table) { min-width: 700px; }
+.table-card :deep(.ant-table) { min-width: 800px; }
 @media (max-width: 768px) {
   .page-container { padding: 16px; }
   .content-card { padding: 16px; margin-bottom: 12px; }

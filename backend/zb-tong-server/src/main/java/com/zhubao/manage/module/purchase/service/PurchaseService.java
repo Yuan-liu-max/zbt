@@ -3,13 +3,14 @@ package com.zhubao.manage.module.purchase.service;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.zhubao.manage.common.dto.PageDTO;
 import com.zhubao.manage.common.exception.BusinessException;
 import com.zhubao.manage.common.interceptor.UserContextHolder;
+import com.zhubao.manage.module.purchase.dto.PurchaseQueryDTO;
 import com.zhubao.manage.module.purchase.entity.PurchaseItem;
 import com.zhubao.manage.module.purchase.entity.PurchaseOrder;
 import com.zhubao.manage.module.purchase.mapper.PurchaseItemMapper;
 import com.zhubao.manage.module.purchase.mapper.PurchaseOrderMapper;
+import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -26,10 +27,17 @@ public class PurchaseService {
         this.orderMapper = om; this.itemMapper = im; this.userContextHolder = uch;
     }
 
-    public IPage<PurchaseOrder> page(PageDTO dto) {
+    public IPage<PurchaseOrder> page(PurchaseQueryDTO dto) {
+        LambdaQueryWrapper<PurchaseOrder> w = new LambdaQueryWrapper<>();
+        if (StringUtils.isNotBlank(dto.getPurchaseNo()))
+            w.like(PurchaseOrder::getOrderNo, dto.getPurchaseNo());
+        if (StringUtils.isNotBlank(dto.getOrderNo()))
+            w.like(PurchaseOrder::getOrderNo, dto.getOrderNo());
+        if (StringUtils.isNotBlank(dto.getStatus()))
+            w.eq(PurchaseOrder::getStatus, dto.getStatus());
+        w.orderByDesc(PurchaseOrder::getCreatedAt);
         return orderMapper.selectPage(
-                new Page<>(dto.getPageNum(), dto.getPageSize()),
-                new LambdaQueryWrapper<PurchaseOrder>().orderByDesc(PurchaseOrder::getCreatedAt));
+                new Page<>(dto.getPageNum(), dto.getPageSize()), w);
     }
 
     public PurchaseOrder detail(Long id) {
@@ -45,6 +53,12 @@ public class PurchaseService {
     @Transactional
     public PurchaseOrder create(PurchaseOrder order, List<PurchaseItem> items) {
         order.setStatus("DRAFT");
+        if (order.getOrderNo() == null || order.getOrderNo().trim().isEmpty()) {
+            order.setOrderNo("PO" + java.time.LocalDateTime.now()
+                    .format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMddHHmmss"))
+                    + String.format("%03d", (int) (Math.random() * 1000)));
+        }
+        if (order.getTotalAmount() == null) order.setTotalAmount(java.math.BigDecimal.ZERO);
         orderMapper.insert(order);
         if (items != null) {
             for (PurchaseItem item : items) {
@@ -78,14 +92,41 @@ public class PurchaseService {
     }
 
     @Transactional
-    public void reject(Long id) {
+    public void reject(Long id, String reason) {
         PurchaseOrder o = detail(id);
         if (!"SUBMITTED".equals(o.getStatus())) throw new BusinessException(400, "仅已提交可审核");
         o.setStatus("REJECTED");
         o.setApproverId(userContextHolder.getUserId());
+        o.setRemark(reason);
+        orderMapper.updateById(o);
+    }
+    // 无参重载兼容旧调用
+    @Transactional
+    public void reject(Long id) { reject(id, null); }
+
+    @Transactional
+    public void cancel(Long id) {
+        PurchaseOrder o = detail(id);
+        if ("APPROVED".equals(o.getStatus()) || "COMPLETED".equals(o.getStatus()))
+            throw new BusinessException(400, "已审核/已完成的采购单不可取消");
+        o.setStatus("CANCELLED");
         orderMapper.updateById(o);
     }
 
     @Transactional
     public void delete(Long id) { orderMapper.deleteById(id); }
+
+    @Transactional
+    public PurchaseItem createItem(PurchaseItem item) {
+        itemMapper.insert(item);
+        return item;
+    }
+
+    @Transactional
+    public void deleteItem(Long orderId, Long itemId) {
+        PurchaseItem item = itemMapper.selectById(itemId);
+        if (item == null || !orderId.equals(item.getOrderId()))
+            throw new BusinessException(404, "采购明细不存在");
+        itemMapper.deleteById(itemId);
+    }
 }

@@ -1,6 +1,7 @@
 package com.zhubao.manage.module.sales.controller;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.zhubao.manage.common.annotation.OperateLog;
 import com.zhubao.manage.common.dto.ApiResult;
 import com.zhubao.manage.common.dto.PageDTO;
 import com.zhubao.manage.common.dto.PageResult;
@@ -26,9 +27,15 @@ public class SalesController {
 
     public SalesController(SalesService salesService) { this.salesService = salesService; }
 
-    @ApiOperation("销售分页") @GetMapping
-    public ApiResult<PageResult<SalesRecord>> page(@Valid PageDTO dto) {
-        IPage<SalesRecord> r = salesService.page(dto); return ApiResult.ok(PageResult.of(r)); }
+    @ApiOperation("销售分页（支持筛选）") @GetMapping
+    public ApiResult<PageResult<SalesRecord>> page(@Valid PageDTO dto,
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) Long storeId,
+            @RequestParam(required = false) Long employeeId,
+            @RequestParam(required = false) String startDate,
+            @RequestParam(required = false) String endDate,
+            @RequestParam(required = false) String auditStatus) {
+        IPage<SalesRecord> r = salesService.page(dto, keyword, storeId, employeeId, startDate, endDate, auditStatus); return ApiResult.ok(PageResult.of(r)); }
 
     @ApiOperation("销售详情") @GetMapping("/{id}")
     public ApiResult<SalesRecord> detail(@PathVariable Long id) { return ApiResult.ok(salesService.detail(id)); }
@@ -36,9 +43,11 @@ public class SalesController {
     @ApiOperation("销售明细列表") @GetMapping("/{id}/items")
     public ApiResult<List<SalesItem>> items(@PathVariable Long id) { return ApiResult.ok(salesService.getItems(id)); }
 
+    @OperateLog(module = "业绩管理", action = "CREATE", targetType = "SALES")
     @ApiOperation("销售录入") @PostMapping
     public ApiResult<SalesRecord> create(@Valid @RequestBody SalesCreateDTO dto) { return ApiResult.ok(salesService.create(dto)); }
 
+    @OperateLog(module = "业绩管理", action = "AUDIT", targetType = "SALES", targetIdExpr = "#id")
     @ApiOperation("销售审核") @PutMapping("/{id}/audit")
     public ApiResult<Void> audit(@PathVariable Long id, @RequestParam String auditStatus, @RequestParam(required = false) String comment) {
         salesService.audit(id, auditStatus, comment); return ApiResult.ok(); }
@@ -49,9 +58,7 @@ public class SalesController {
 
     @ApiOperation("销售统计") @GetMapping("/stats")
     public ApiResult<Map<String, Object>> stats() {
-        Map<String, Object> s = new java.util.LinkedHashMap<>();
-        s.put("totalAmount", 0); s.put("orderCount", 0); s.put("todayAmount", 0);
-        return ApiResult.ok(s);
+        return ApiResult.ok(salesService.stats());
     }
 
     @ApiOperation("门店指标") @GetMapping("/metrics/store/{storeId}")
@@ -69,4 +76,14 @@ public class SalesController {
     @ApiOperation("品类结构") @GetMapping("/category-structure")
     public ApiResult<List<Map<String, Object>>> categoryStructure(@RequestParam String month, @RequestParam(required = false) Long storeId) {
         return ApiResult.ok(salesService.categoryStructure(month, storeId)); }
+
+    @OperateLog(module = "业绩管理", action = "UPDATE", targetType = "SALES", targetIdExpr = "#id")
+    @ApiOperation("更新销售记录") @PutMapping("/{id}")
+    public ApiResult<Void> update(@PathVariable Long id, @Valid @RequestBody SalesRecord record) {
+        salesService.update(id, record); return ApiResult.ok(); }
+
+    @OperateLog(module = "业绩管理", action = "DELETE", targetType = "SALES", targetIdExpr = "#id")
+    @ApiOperation("删除销售记录") @DeleteMapping("/{id}")
+    public ApiResult<Void> delete(@PathVariable Long id) {
+        salesService.delete(id); return ApiResult.ok(); }
 }

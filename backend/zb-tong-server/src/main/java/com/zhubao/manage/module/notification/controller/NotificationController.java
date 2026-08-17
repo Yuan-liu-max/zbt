@@ -40,4 +40,7 @@ public class NotificationController {
 
     @ApiOperation("未读数") @GetMapping("/unread-count")
     public ApiResult<Long> unreadCount() { return ApiResult.ok(notificationService.unreadCount(userContextHolder.getUserId())); }
+
+    @ApiOperation("各状态计数") @GetMapping("/count")
+    public ApiResult<Map<String, Long>> counts() { return ApiResult.ok(notificationService.counts(userContextHolder.getUserId())); }
 }

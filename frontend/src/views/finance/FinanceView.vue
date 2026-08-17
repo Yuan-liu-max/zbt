@@ -11,9 +11,6 @@
         <div class="stat-info">
           <div class="stat-label">总收入</div>
           <div class="stat-value">¥ {{ financeStats.totalIncome.toLocaleString() }}</div>
-          <div class="stat-trend" :class="financeStats.incomeChange >= 0 ? 'up' : 'down'">
-            较上月 {{ financeStats.incomeChange >= 0 ? '↑' : '↓' }} {{ Math.abs(financeStats.incomeChange) }}%
-          </div>
         </div>
         <div class="stat-icon income">
           <DollarOutlined />
@@ -23,48 +20,18 @@
         <div class="stat-info">
           <div class="stat-label">总支出</div>
           <div class="stat-value">¥ {{ financeStats.totalExpense.toLocaleString() }}</div>
-          <div class="stat-trend" :class="financeStats.expenseChange >= 0 ? 'up' : 'down'">
-            较上月 {{ financeStats.expenseChange >= 0 ? '↑' : '↓' }} {{ Math.abs(financeStats.expenseChange) }}%
-          </div>
         </div>
         <div class="stat-icon expense">
-          <DownloadOutlined />
+          <FallOutlined />
         </div>
       </div>
       <div class="stat-card">
         <div class="stat-info">
           <div class="stat-label">净利润</div>
           <div class="stat-value">¥ {{ financeStats.netProfit.toLocaleString() }}</div>
-          <div class="stat-trend" :class="financeStats.profitChange >= 0 ? 'up' : 'down'">
-            较上月 {{ financeStats.profitChange >= 0 ? '↑' : '↓' }} {{ Math.abs(financeStats.profitChange) }}%
-          </div>
         </div>
         <div class="stat-icon profit">
           <RiseOutlined />
-        </div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-info">
-          <div class="stat-label">应收账款</div>
-          <div class="stat-value">¥ {{ financeStats.receivable.toLocaleString() }}</div>
-          <div class="stat-trend" :class="financeStats.receivableChange >= 0 ? 'up' : 'down'">
-            较上月 {{ financeStats.receivableChange >= 0 ? '↑' : '↓' }} {{ Math.abs(financeStats.receivableChange) }}%
-          </div>
-        </div>
-        <div class="stat-icon receivable">
-          <AccountBookOutlined />
-        </div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-info">
-          <div class="stat-label">应付账款</div>
-          <div class="stat-value">¥ {{ financeStats.payable.toLocaleString() }}</div>
-          <div class="stat-trend" :class="financeStats.payableChange >= 0 ? 'up' : 'down'">
-            较上月 {{ financeStats.payableChange >= 0 ? '↑' : '↓' }} {{ Math.abs(financeStats.payableChange) }}%
-          </div>
-        </div>
-        <div class="stat-icon payable">
-          <CreditCardOutlined />
         </div>
       </div>
     </div>
@@ -212,9 +179,13 @@
     </a-modal>
     <a-modal v-model:open="detailVisible" title="详情" :footer="null" width="600px">
       <a-descriptions :column="2" bordered size="small">
-        <a-descriptions-item v-for="(val, key) in detailRecord" :key="key" :label="String(key)" :span="typeof val === 'object' ? 2 : 1">
-          {{ typeof val === 'object' ? JSON.stringify(val) : val }}
-        </a-descriptions-item>
+        <a-descriptions-item label="流水号">{{ detailRecord?.code }}</a-descriptions-item>
+        <a-descriptions-item label="交易类型">{{ detailRecord?.type === 'income' ? '收入' : '支出' }}</a-descriptions-item>
+        <a-descriptions-item label="交易账户">{{ detailRecord?.account }}</a-descriptions-item>
+        <a-descriptions-item label="关联对象">{{ detailRecord?.relatedObject }}</a-descriptions-item>
+        <a-descriptions-item label="交易金额">¥{{ detailRecord?.amount }}</a-descriptions-item>
+        <a-descriptions-item label="交易日期">{{ detailRecord?.transactionDate }}</a-descriptions-item>
+        <a-descriptions-item label="备注" :span="2">{{ detailRecord?.remark || '-' }}</a-descriptions-item>
       </a-descriptions>
     </a-modal>
   </div>
@@ -223,7 +194,8 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
-import { PlusOutlined, DollarOutlined, DownloadOutlined, RiseOutlined, AccountBookOutlined, CreditCardOutlined } from '@ant-design/icons-vue'
+import dayjs from 'dayjs'
+import { PlusOutlined, DollarOutlined, FallOutlined, RiseOutlined } from '@ant-design/icons-vue'
 import type { FinanceStats, TransactionRecord, TransactionQueryParams, TransactionType } from '@/types/finance'
 import { financeApi } from '@/api/finance'
 import { exportComingSoon } from '@/utils/export'
@@ -233,8 +205,7 @@ const activeTab = ref('transaction')
 
 // 财务统计
 const financeStats = reactive<FinanceStats>({
-  totalIncome: 0, totalExpense: 0, netProfit: 0, receivable: 0, payable: 0,
-  incomeChange: 0, expenseChange: 0, profitChange: 0, receivableChange: 0, payableChange: 0
+  totalIncome: 0, totalExpense: 0, netProfit: 0
 })
 
 // 搜索表单
@@ -251,10 +222,9 @@ const tableData = ref<TransactionRecord[]>([])
 const loading = ref(false)
 const pagination = reactive({
   current: 1,
-  size: 10,
+  pageSize: 10,
   total: 0,
   showSizeChanger: true,
-  showQuickJumper: true,
   showTotal: (total: number) => `共 ${total} 条`
 })
 
@@ -272,7 +242,7 @@ const columns = [
 
 // 详情弹窗
 const detailVisible = ref(false)
-const detailRecord = ref<any>(null)
+const detailRecord = ref<TransactionRecord | null>(null)
 
 // 弹窗相关
 const modalVisible = ref(false)
@@ -293,7 +263,8 @@ const formRules = {
   type: [{ required: true, message: '请选择交易类型', trigger: 'change' }],
   account: [{ required: true, message: '请选择交易账户', trigger: 'change' }],
   relatedObject: [{ required: true, message: '请输入关联对象', trigger: 'blur' }],
-  amount: [{ required: true, message: '请输入交易金额', trigger: 'blur' }]
+  amount: [{ required: true, message: '请输入交易金额', trigger: 'blur' }],
+  transactionDate: [{ required: true, message: '请选择交易日期', trigger: 'change' }]
 }
 
 // 加载统计
@@ -324,7 +295,7 @@ const loadData = async () => {
     tableData.value = res.list
     pagination.total = res.total
   } catch (error) {
-    message.error('加载数据失败')
+    console.error('加载数据失败', error)
   } finally {
     loading.value = false
   }
@@ -379,6 +350,7 @@ const handleEdit = (record: TransactionRecord) => {
   formData.account = record.account
   formData.relatedObject = record.relatedObject
   formData.amount = record.amount
+  formData.transactionDate = record.transactionDate ? dayjs(record.transactionDate) : null
   formData.remark = record.remark
   modalVisible.value = true
 }
@@ -390,7 +362,7 @@ const handleDelete = async (record: TransactionRecord) => {
     message.success('删除成功')
     loadData()
   } catch (error) {
-    message.error('删除失败')
+    console.error('删除失败', error)
   }
 }
 
@@ -462,7 +434,7 @@ onMounted(() => {
 /* 统计卡片 */
 .stats-row {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: 16px;
   margin-bottom: 16px;
 }
@@ -511,8 +483,6 @@ onMounted(() => {
 .stat-icon.income { background: #e6f7ff; color: #1890ff; }
 .stat-icon.expense { background: #fff7e6; color: #fa8c16; }
 .stat-icon.profit { background: #f6ffed; color: #52c41a; }
-.stat-icon.receivable { background: #f9f0ff; color: #722ed1; }
-.stat-icon.payable { background: #fff1f0; color: #ff4d4f; }
 
 .content-card {
   background: #fff;

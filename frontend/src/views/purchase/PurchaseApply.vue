@@ -23,23 +23,36 @@
         layout="horizontal"
         class="apply-form"
       >
-        <a-form-item label="申请人" name="applicantName">
-          <a-input v-model:value="basicForm.applicantName" placeholder="请输入申请人" />
+        <a-form-item label="申请人" name="applicantId">
+          <a-select
+            v-model:value="basicForm.applicantId"
+            placeholder="请选择申请人"
+            show-search
+            :filter-option="filterOption"
+          >
+            <a-select-option v-for="u in users" :key="u.id" :value="u.id">
+              {{ u.name }}
+            </a-select-option>
+          </a-select>
         </a-form-item>
-        <a-form-item label="申请日期" name="applyDate">
-          <a-date-picker
-            v-model:value="basicForm.applyDate"
-            placeholder="请选择申请日期"
-            style="width: 100%"
-            value-format="YYYY-MM-DD"
-          />
+        <a-form-item label="门店" name="storeId">
+          <a-select
+            v-model:value="basicForm.storeId"
+            placeholder="请选择门店"
+            show-search
+            :filter-option="filterOption"
+          >
+            <a-select-option v-for="s in stores" :key="s.id" :value="s.id">
+              {{ s.name }}
+            </a-select-option>
+          </a-select>
         </a-form-item>
         <a-form-item label="供应商" name="supplierId">
           <a-select
             v-model:value="basicForm.supplierId"
             placeholder="请选择供应商"
             show-search
-            :filter-option="filterSupplierOption"
+            :filter-option="filterOption"
           >
             <a-select-option v-for="s in suppliers" :key="s.id" :value="s.id">
               {{ s.name }}
@@ -78,14 +91,6 @@
                 size="small"
               />
             </template>
-            <!-- 规格 -->
-            <template v-if="column.key === 'spec'">
-              <a-input
-                v-model:value="record.spec"
-                placeholder="请输入规格"
-                size="small"
-              />
-            </template>
             <!-- 数量 -->
             <template v-if="column.key === 'quantity'">
               <a-input-number
@@ -98,9 +103,9 @@
               />
             </template>
             <!-- 单价 -->
-            <template v-if="column.key === 'unitPrice'">
+            <template v-if="column.key === 'price'">
               <a-input-number
-                v-model:value="record.unitPrice"
+                v-model:value="record.price"
                 :min="0"
                 :precision="2"
                 style="width: 100%"
@@ -157,60 +162,100 @@ import { PlusOutlined } from '@ant-design/icons-vue'
 import { useRouter } from 'vue-router'
 import { purchaseApi } from '@/api/purchase'
 import { supplierApi } from '@/api/supplier'
+import { userApi } from '@/api/system'
 import type { SupplierItem } from '@/types/supplier'
-import type { PurchaseItem } from '@/types/purchase'
+import request from '@/utils/request'
 
 const router = useRouter()
+
+interface OptionItem {
+  id: number
+  name: string
+}
 
 // 基本信息表单
 const basicFormRef = ref()
 const basicForm = reactive({
-  applicantName: '',
-  applyDate: '' as string,
-  supplierId: undefined as string | undefined,
+  applicantId: undefined as number | undefined,
+  storeId: undefined as number | undefined,
+  supplierId: undefined as number | undefined,
   remark: '',
 })
 
 const basicRules = {
-  applicantName: [{ required: true, message: '请输入申请人', trigger: 'blur' }],
-  applyDate: [{ required: true, message: '请选择申请日期', trigger: 'change' }],
+  applicantId: [{ required: true, message: '请选择申请人', trigger: 'change' }],
+  storeId: [{ required: true, message: '请选择门店', trigger: 'change' }],
   supplierId: [{ required: true, message: '请选择供应商', trigger: 'change' }],
 }
 
-// 供应商列表
+// 申请人 / 门店 / 供应商下拉
+const users = ref<OptionItem[]>([])
+const stores = ref<OptionItem[]>([])
 const suppliers = ref<SupplierItem[]>([])
 
-const filterSupplierOption = (input: string, option: any) => {
+const filterOption = (input: string, option: any) => {
   return option.children?.[0]?.toLowerCase().includes(input.toLowerCase()) ?? false
 }
 
-// 商品明细
+const loadUsers = async () => {
+  try {
+    const res = await userApi.getList({ page: 1, pageSize: 100 })
+    users.value = (res.list || []).map(u => ({ id: Number(u.id), name: u.realName || u.username }))
+  } catch (error) {
+    console.error('加载用户失败', error)
+  }
+}
+
+const loadStores = async () => {
+  try {
+    const list: any[] = await request.get('/stores/all')
+    stores.value = (list || []).map(s => ({ id: Number(s.id), name: s.name || `门店${s.id}` }))
+  } catch (error) {
+    console.error('加载门店失败', error)
+  }
+}
+
+const loadSuppliers = async () => {
+  try {
+    const res = await supplierApi.getList({ page: 1, pageSize: 100 })
+    suppliers.value = res.list || []
+  } catch (error) {
+    console.error('加载供应商失败', error)
+  }
+}
+
+// 商品明细（后端 PurchaseItem：productName / quantity / price）
 let keyCounter = 0
-const createEmptyItem = (): PurchaseItem & { _key: number } => ({
+interface ApplyItem {
+  _key: number
+  productName: string
+  quantity: number
+  price: number
+  subtotal: number
+}
+const createEmptyItem = (): ApplyItem => ({
   _key: ++keyCounter,
   productName: '',
-  spec: '',
   quantity: 1,
-  unitPrice: 0,
+  price: 0,
   subtotal: 0,
 })
 
-const items = ref<(PurchaseItem & { _key: number })[]>([createEmptyItem()])
+const items = ref<ApplyItem[]>([createEmptyItem()])
 
 // 表格列配置
 const itemColumns = [
-  { title: '商品名称', dataIndex: 'productName', key: 'productName', width: 160 },
-  { title: '规格', dataIndex: 'spec', key: 'spec', width: 120 },
-  { title: '数量', dataIndex: 'quantity', key: 'quantity', width: 100, align: 'center' as const },
-  { title: '单价(元)', dataIndex: 'unitPrice', key: 'unitPrice', width: 120, align: 'right' as const },
-  { title: '小计(元)', dataIndex: 'subtotal', key: 'subtotal', width: 120, align: 'right' as const },
+  { title: '商品名称', dataIndex: 'productName', key: 'productName', width: 200 },
+  { title: '数量', dataIndex: 'quantity', key: 'quantity', width: 120, align: 'center' as const },
+  { title: '单价(元)', dataIndex: 'price', key: 'price', width: 140, align: 'right' as const },
+  { title: '小计(元)', dataIndex: 'subtotal', key: 'subtotal', width: 140, align: 'right' as const },
   { title: '操作', key: 'action', width: 80, align: 'center' as const },
 ]
 
 // 计算小计
 const calcSubtotal = (index: number) => {
   const item = items.value[index]
-  item.subtotal = (item.quantity || 0) * (item.unitPrice || 0)
+  item.subtotal = (item.quantity || 0) * (item.price || 0)
 }
 
 // 总金额
@@ -262,27 +307,22 @@ const handleSubmit = async () => {
       message.warning(`"${item.productName}" 数量必须大于0`)
       return
     }
-    if (!item.unitPrice || item.unitPrice <= 0) {
+    if (!item.price || item.price <= 0) {
       message.warning(`"${item.productName}" 单价必须大于0`)
       return
     }
   }
 
-  const supplier = suppliers.value.find((s) => s.id === basicForm.supplierId)
-
   const payload = {
-    applicantName: basicForm.applicantName,
-    applyDate: basicForm.applyDate,
+    storeId: basicForm.storeId,
     supplierId: basicForm.supplierId,
-    supplierName: supplier?.name || '',
+    applicantId: basicForm.applicantId,
     remark: basicForm.remark,
     totalAmount: totalAmount.value,
     items: validItems.map((item) => ({
       productName: item.productName,
-      spec: item.spec,
       quantity: item.quantity,
-      unitPrice: item.unitPrice,
-      subtotal: item.subtotal,
+      price: item.price,
     })),
   }
 
@@ -292,7 +332,7 @@ const handleSubmit = async () => {
     message.success('采购申请提交成功')
     router.push('/purchase/list')
   } catch (error) {
-    message.error('提交失败，请重试')
+    console.error('提交失败，请重试', error)
   } finally {
     submitting.value = false
   }
@@ -303,17 +343,9 @@ const handleCancel = () => {
   router.push('/purchase/list')
 }
 
-// 加载供应商
-const loadSuppliers = async () => {
-  try {
-    const res = await supplierApi.getList({ page: 1, size: 200 })
-    suppliers.value = res.list || []
-  } catch (error) {
-    console.error('加载供应商失败', error)
-  }
-}
-
 onMounted(() => {
+  loadUsers()
+  loadStores()
   loadSuppliers()
 })
 </script>

@@ -11,7 +11,10 @@ public class EmployeeAssessment {
     @TableId(type = IdType.AUTO) private Long id;
     private Long employeeId;
     private Long assessorId;
+    @TableField(exist = false) private String employeeName;
+    @TableField(exist = false) private String assessorName;
     private String assessmentWeek;
+    private String type;
     private BigDecimal productKnowledgeScore;
     private BigDecimal matchingSkillScore;
     private BigDecimal receptionScore;

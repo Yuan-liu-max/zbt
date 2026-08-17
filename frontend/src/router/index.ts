@@ -4,8 +4,14 @@ import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import DefaultLayout from '@/layouts/DefaultLayout.vue'
 
 /* ---------- 懒加载页面 ---------- */
+const viewModules = import.meta.glob('../views/**/*.vue')
+
 const lazy = (path: string) => {
-  return () => import(/* @vite-ignore */ `/src/views/${path}.vue`)
+  const loader = viewModules[`../views/${path}.vue`]
+  if (!loader) {
+    return Promise.reject(new Error(`View not found: ${path}`))
+  }
+  return loader
 }
 
 /* ============================
@@ -302,30 +308,40 @@ export const menuRoutes: RouteRecordRaw[] = [
   {
     path: '/:pathMatch(.*)*',
     name: 'NotFound',
-    component: lazy('login/LoginView'),
+    component: lazy('error/NotFound'),
     meta: { title: '页面不存在', hidden: true },
   },
 ]
 
 const router = createRouter({
-  history: createWebHistory(),
+  history: createWebHistory('/admin/'),
   routes: menuRoutes,
   scrollBehavior: () => ({ top: 0 }),
 })
 
 /* ---------- 全局前置守卫 ---------- */
-router.beforeEach((to, _from, next) => {
+router.beforeEach(async (to, _from, next) => {
   const title = (to.meta.title as string) || '珠宝通'
   document.title = `${title} - 珠宝通珠宝行业管理系统`
 
-  // 登录鉴权 —— token 不存在时跳 /login
-  const token = localStorage.getItem('token')
-  if (!token && to.path !== '/login' && to.path !== '/register' && !to.path.startsWith('/profile') && !to.path.startsWith('/settings') && !to.path.startsWith('/notify') && !to.path.startsWith('/message')) {
-    return next('/login')
+  // 登录页和注册页直接放行，不做任何拦截
+  if (to.path === '/login' || to.path === '/register') {
+    next()
+    return
   }
-  // 已登录访问登录页时跳转到首页
-  if (token && (to.path === '/login' || to.path === '/register')) {
-    return next('/dashboard')
+
+  // 动态导入 store 避免循环依赖
+  const { useAuthStore } = await import('@/stores/useAuthStore')
+  const authStore = useAuthStore()
+
+  // 初始化登录态（init() 内部已过滤：仅管理员角色才算已登录）
+  if (!authStore.token && !authStore.isLoading) {
+    await authStore.init()
+  }
+
+  if (!authStore.isLoggedIn) {
+    next('/login')
+    return
   }
 
   next()

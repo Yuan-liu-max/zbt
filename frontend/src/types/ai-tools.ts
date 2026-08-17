@@ -1,15 +1,16 @@
 // 智能工具相关类型定义
 
-// 文档模板类型
-export type TemplateCategory = 'all' | 'contract' | 'report' | 'form' | 'notice' | 'other'
+// 文档模板分类（按 businessType 归类）
+export type TemplateCategory = 'all' | 'EMPLOYEE' | 'PRODUCT' | 'SCENE' | 'TASK' | 'OTHER'
 
-// 文档模板
+// 文档模板（源自提示词模板 prompt_template）
 export interface DocTemplate {
   id: string
   name: string
   description: string
-  category: TemplateCategory
-  usageCount: number
+  businessType: string
+  content: string
+  typeLabel: string
 }
 
 // 智能建议

@@ -21,7 +21,9 @@ public class TaskInstance {
     private Long storeId;
     private Long assigneeId;
     private Long auditorId;
+    @com.fasterxml.jackson.annotation.JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss", timezone = "GMT+8")
     private LocalDateTime startTime;
+    @com.fasterxml.jackson.annotation.JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss", timezone = "GMT+8")
     private LocalDateTime dueTime;
     private LocalDateTime completedTime;
     private String status;
@@ -36,7 +38,6 @@ public class TaskInstance {
     private BigDecimal manualScore;
     private BigDecimal finalScore;
 
-    @TableField(fill = FieldFill.INSERT)
     @TableLogic private Integer isDeleted;
 
     @TableField(exist = false) private String assigneeName;

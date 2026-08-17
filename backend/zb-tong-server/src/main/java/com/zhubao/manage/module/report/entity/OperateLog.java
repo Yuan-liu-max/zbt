@@ -18,4 +18,5 @@ public class OperateLog {
     private String oldData;
     private String newData;
     @TableField(fill = FieldFill.INSERT) private LocalDateTime createdAt;
+    @TableField(exist = false) private String operatorName;
 }

@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.zhubao.manage.common.dto.PageDTO;
+import com.zhubao.manage.common.exception.BusinessException;
 import com.zhubao.manage.module.customer.entity.Customer;
 import com.zhubao.manage.module.customer.entity.MemberLevel;
 import com.zhubao.manage.module.customer.mapper.CustomerMapper;
@@ -38,10 +39,39 @@ public class CustomerService {
     public Customer detail(Long id) { return customerMapper.selectById(id); }
 
     @Transactional
-    public Customer create(Customer c) { customerMapper.insert(c); return c; }
+    public Customer create(Customer c) {
+        if (StringUtils.isBlank(c.getCode())) {
+            c.setCode("KH" + System.currentTimeMillis() % 100000000);
+        }
+        checkCodeUnique(c.getCode(), null);
+        customerMapper.insert(c); return c;
+    }
 
     @Transactional
-    public Customer update(Long id, Customer c) { c.setId(id); customerMapper.updateById(c); return detail(id); }
+    public Customer update(Long id, Customer c) {
+        Customer exist = customerMapper.selectById(id);
+        if (exist == null) return null;
+        if (StringUtils.isNotBlank(c.getCode())) {
+            checkCodeUnique(c.getCode(), id);
+            exist.setCode(c.getCode());
+        }
+        if (StringUtils.isNotBlank(c.getName())) exist.setName(c.getName());
+        if (StringUtils.isNotBlank(c.getPhone())) exist.setPhone(c.getPhone());
+        if (StringUtils.isNotBlank(c.getLevel())) exist.setLevel(c.getLevel());
+        if (c.getTotalConsumption() != null) exist.setTotalConsumption(c.getTotalConsumption());
+        if (c.getPoints() != null) exist.setPoints(c.getPoints());
+        if (StringUtils.isNotBlank(c.getStatus())) exist.setStatus(c.getStatus());
+        customerMapper.updateById(exist);
+        return exist;
+    }
+
+    private void checkCodeUnique(String code, Long excludeId) {
+        LambdaQueryWrapper<Customer> w = new LambdaQueryWrapper<Customer>().eq(Customer::getCode, code);
+        if (excludeId != null) w.ne(Customer::getId, excludeId);
+        if (customerMapper.selectCount(w) > 0) {
+            throw new BusinessException(400, "客户编号 [" + code + "] 已存在");
+        }
+    }
 
     @Transactional
     public void delete(Long id) { customerMapper.deleteById(id); }
@@ -57,12 +87,17 @@ public class CustomerService {
     }
 
     public Map<String, Object> levelStats() {
-        List<MemberLevel> all = memberLevelMapper.selectList(null);
+        // 从 customer 表真实统计各等级会员数
+        List<Customer> allCustomers = customerMapper.selectList(null);
+        Map<String, Long> countByIdentifier = allCustomers.stream()
+                .filter(c -> StringUtils.isNotBlank(c.getLevel()))
+                .collect(java.util.stream.Collectors.groupingBy(Customer::getLevel, java.util.stream.Collectors.counting()));
         Map<String, Object> stats = new LinkedHashMap<>();
-        stats.put("totalCount", all.stream().mapToInt(MemberLevel::getMemberCount).sum());
-        for (MemberLevel ml : all) {
-            stats.put(ml.getIdentifier() + "Count", ml.getMemberCount());
-        }
+        long total = countByIdentifier.values().stream().mapToLong(Long::longValue).sum();
+        stats.put("totalCount", total);
+        stats.put("vipCount", countByIdentifier.getOrDefault("vip", 0L));
+        stats.put("normalCount", countByIdentifier.getOrDefault("normal", 0L));
+        stats.put("diamondCount", countByIdentifier.getOrDefault("diamond", 0L));
         return stats;
     }
 

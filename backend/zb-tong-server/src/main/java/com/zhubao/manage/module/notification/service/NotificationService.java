@@ -50,6 +50,18 @@ public class NotificationService {
                 new LambdaQueryWrapper<Notification>().eq(Notification::getReceiverId, receiverId).eq(Notification::getIsRead, 0));
     }
 
+    /** 各状态计数：total / unread / read */
+    public java.util.Map<String, Long> counts(Long receiverId) {
+        java.util.Map<String, Long> result = new java.util.HashMap<>();
+        result.put("total", notificationMapper.selectCount(
+                new LambdaQueryWrapper<Notification>().eq(Notification::getReceiverId, receiverId)));
+        result.put("unread", notificationMapper.selectCount(
+                new LambdaQueryWrapper<Notification>().eq(Notification::getReceiverId, receiverId).eq(Notification::getIsRead, 0)));
+        result.put("read", notificationMapper.selectCount(
+                new LambdaQueryWrapper<Notification>().eq(Notification::getReceiverId, receiverId).eq(Notification::getIsRead, 1)));
+        return result;
+    }
+
     /** 发送站内信 */
     @Transactional
     public Notification send(Long receiverId, String title, String content, String type, String businessType, Long businessId) {
