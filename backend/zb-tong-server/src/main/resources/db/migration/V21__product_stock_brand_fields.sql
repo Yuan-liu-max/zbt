@@ -5,8 +5,8 @@
 -- ============================================================
 
 ALTER TABLE `product`
-    ADD COLUMN `stock` INT NOT NULL DEFAULT 0 COMMENT '当前库存' AFTER `store_id`,
-    ADD COLUMN `image_url` VARCHAR(500) NULL DEFAULT NULL COMMENT '商品图片URL' AFTER `store_id`;
+    ADD COLUMN `stock` INT NOT NULL DEFAULT 0 COMMENT '当前库存' AFTER `store_id`;
+-- 注意：image_url 已在 V4 建表时定义，此处不再重复添加（避免 Duplicate column 错误）
 
 ALTER TABLE `product_brand`
     ADD COLUMN `logo` VARCHAR(500) NULL DEFAULT NULL COMMENT '品牌LOGO' AFTER `category_name`,
