@@ -89,6 +89,9 @@ let placeSearch: any = null
 let marker: any = null
 let currentPos: LngLat = { lng: 116.397428, lat: 39.90923 } // 默认北京
 
+// 周边搜索防抖定时器（减少拖动/缩放过程中的高频请求）
+let searchTimer: any = null
+
 onMounted(async () => {
   try {
     const AMap = await loadAMap()
@@ -100,6 +103,7 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
+  if (searchTimer) clearTimeout(searchTimer)
   if (map) { try { map.destroy() } catch {} }
 })
 
@@ -126,9 +130,18 @@ function initMap(AMap: any) {
     icon: 'https://webapi.amap.com/theme/v1.3/markers/n/mark_r.png',
   })
   map.add(marker)
-  // 地图拖动/缩放后，以地图中心为圆心重新搜索周边
-  map.on('moveend', searchAround)
-  map.on('zoomend', searchAround)
+  // 减少周边搜索请求：
+  // 1. 用 dragend 代替 moveend —— 过滤定位/选POI等程序化 setCenter 触发的多余搜索
+  // 2. 防抖 —— 连续拖动/缩放只搜最后一次（停手 500ms 后）
+  // 3. 缩放级别限制 —— 缩到省级/全国视图(zoom<12)不搜，避免无效请求
+  map.on('dragend', debouncedSearchAround)
+  map.on('zoomend', debouncedSearchAround)
+}
+
+/** 防抖包装：连续触发只执行最后一次 */
+function debouncedSearchAround() {
+  if (searchTimer) clearTimeout(searchTimer)
+  searchTimer = setTimeout(() => searchAround(), 500)
 }
 
 /** 定位到当前位置 */
@@ -143,6 +156,7 @@ function locateMe() {
       map.setCenter([lng, lat])
       marker.setPosition([lng, lat])
       showToast('定位成功')
+      // 定位是主动操作，直接立即搜索（不过防抖）
       searchAround()
     } else {
       showToast('定位失败，请检查定位权限')
@@ -154,6 +168,12 @@ function locateMe() {
 /** 以地图中心搜索周边 POI */
 function searchAround() {
   if (!placeSearch || !map) return
+  // 缩放级别限制：省级/全国视图下周边搜索无意义，跳过
+  if (map.getZoom() < 12) {
+    pois.value = []
+    centerText.value = '地图范围过大，请放大后查看周边'
+    return
+  }
   const center = map.getCenter()
   if (!center) return
   currentPos = { lng: center.getLng(), lat: center.getLat() }
