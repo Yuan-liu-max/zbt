@@ -68,82 +68,83 @@ public class AuthInterceptor implements HandlerInterceptor {
             return true;
         }
 
-        String token = extractToken(request);
-        if (token == null) {
+        List<String> candidates = extractTokenCandidates(request);
+        if (candidates.isEmpty()) {
             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
             return false;
         }
 
-        try {
-            Claims claims = jwtUtil.parseToken(token);
-            Long userId = claims.get("userId", Long.class);
-            String username = claims.getSubject();
-            if (username == null) username = claims.get("username", String.class);
+        // 逐个尝试候选 token，第一个解析成功且用户有效的生效
+        for (String token : candidates) {
+            try {
+                Claims claims = jwtUtil.parseToken(token);
+                Long userId = claims.get("userId", Long.class);
+                String username = claims.getSubject();
+                if (username == null) username = claims.get("username", String.class);
 
-            Long storeId = claims.get("storeId", Long.class);
-            Long regionId = claims.get("regionId", Long.class);
+                Long storeId = claims.get("storeId", Long.class);
+                Long regionId = claims.get("regionId", Long.class);
 
-            // 每次请求都校验用户状态，防止停用后已有 token 仍可访问
-            User user = null;
-            if (userId != null) {
-                user = userMapper.selectById(userId);
-                if (user == null) {
-                    response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-                    return false;
+                // 每次请求都校验用户状态，防止停用后已有 token 仍可访问
+                User user = null;
+                if (userId != null) {
+                    user = userMapper.selectById(userId);
+                    if (user == null) {
+                        continue;
+                    }
+                    if ("DISABLED".equals(user.getStatus())) {
+                        log.info("用户 {} 已被停用，拒绝访问", user.getUsername());
+                        response.setStatus(HttpServletResponse.SC_FORBIDDEN);
+                        response.setContentType("application/json;charset=UTF-8");
+                        response.getWriter().write("{\"code\":403,\"msg\":\"账号已被停用，请联系管理员\"}");
+                        return false;
+                    }
+                    // 校验 tokenVersion：管理员强制下线后，旧 token 立即失效
+                    Integer jwtVersion = claims.get("tokenVersion", Integer.class);
+                    Integer dbVersion = user.getTokenVersion() != null ? user.getTokenVersion() : 0;
+                    if (jwtVersion != null && jwtVersion < dbVersion) {
+                        log.info("用户 {} 的token已被强制失效 (JWT v{} < DB v{})", user.getUsername(), jwtVersion, dbVersion);
+                        continue;
+                    }
+                    if (storeId == null) storeId = user.getStoreId();
+                    if (regionId == null) regionId = user.getRegionId();
                 }
-                if ("DISABLED".equals(user.getStatus())) {
-                    log.info("用户 {} 已被停用，拒绝访问", user.getUsername());
-                    response.setStatus(HttpServletResponse.SC_FORBIDDEN);
-                    response.setContentType("application/json;charset=UTF-8");
-                    response.getWriter().write("{\"code\":403,\"msg\":\"账号已被停用，请联系管理员\"}");
-                    return false;
+
+                // 优先从 JWT claims 读取 roles（减少DB查询 P1-5），失败时回退到 DB
+                String rolesClaim = claims.get("roles", String.class);
+                List<String> roleCodes;
+                if (rolesClaim != null && !rolesClaim.isEmpty()) {
+                    roleCodes = java.util.Arrays.asList(rolesClaim.split(","));
+                } else {
+                    roleCodes = resolveRoles(userId);
                 }
-                // 校验 tokenVersion：管理员强制下线后，旧 token 立即失效
-                Integer jwtVersion = claims.get("tokenVersion", Integer.class);
-                Integer dbVersion = user.getTokenVersion() != null ? user.getTokenVersion() : 0;
-                if (jwtVersion != null && jwtVersion < dbVersion) {
-                    log.info("用户 {} 的token已被强制失效 (JWT v{} < DB v{})", user.getUsername(), jwtVersion, dbVersion);
-                    response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-                    response.setContentType("application/json;charset=UTF-8");
-                    response.getWriter().write("{\"code\":401,\"msg\":\"账号已被强制下线，请重新登录\"}");
-                    return false;
-                }
-                if (storeId == null) storeId = user.getStoreId();
-                if (regionId == null) regionId = user.getRegionId();
+                String dataScopeLevel = resolveDataScopeLevel(roleCodes);
+
+                // Spring Security
+                List<SimpleGrantedAuthority> authorities = roleCodes.stream()
+                        .map(SimpleGrantedAuthority::new).collect(Collectors.toList());
+                SecurityContextHolder.getContext().setAuthentication(
+                        new UsernamePasswordAuthenticationToken(userId, null, authorities));
+
+                // UserContext (含 dataScope 缓存)
+                UserContext context = new UserContext();
+                context.setUserId(userId);
+                context.setUsername(username);
+                context.setStoreId(storeId);
+                context.setRegionId(regionId);
+                context.setDataScopeLevel(dataScopeLevel);
+                userContextHolder.set(context);
+
+                return true;
+
+            } catch (Exception e) {
+                log.debug("Token校验失败，尝试下一个候选: {}", e.getMessage());
             }
-
-            // 优先从 JWT claims 读取 roles（减少DB查询 P1-5），失败时回退到 DB
-            String rolesClaim = claims.get("roles", String.class);
-            List<String> roleCodes;
-            if (rolesClaim != null && !rolesClaim.isEmpty()) {
-                roleCodes = java.util.Arrays.asList(rolesClaim.split(","));
-            } else {
-                roleCodes = resolveRoles(userId);
-            }
-            String dataScopeLevel = resolveDataScopeLevel(roleCodes);
-
-            // Spring Security
-            List<SimpleGrantedAuthority> authorities = roleCodes.stream()
-                    .map(SimpleGrantedAuthority::new).collect(Collectors.toList());
-            SecurityContextHolder.getContext().setAuthentication(
-                    new UsernamePasswordAuthenticationToken(userId, null, authorities));
-
-            // UserContext (含 dataScope 缓存)
-            UserContext context = new UserContext();
-            context.setUserId(userId);
-            context.setUsername(username);
-            context.setStoreId(storeId);
-            context.setRegionId(regionId);
-            context.setDataScopeLevel(dataScopeLevel);
-            userContextHolder.set(context);
-
-            return true;
-
-        } catch (Exception e) {
-            log.warn("Token校验失败: {}", e.getMessage());
-            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-            return false;
         }
+
+        log.warn("所有候选 Token 均校验失败");
+        response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+        return false;
     }
 
     private List<String> resolveRoles(Long userId) {
@@ -175,33 +176,53 @@ public class AuthInterceptor implements HandlerInterceptor {
         } catch (Exception ignored) { return "SELF"; }
     }
 
-    private String extractToken(HttpServletRequest request) {
+    /**
+     * 收集所有候选 token（按优先级排序）：
+     * 1. 路径分区的 primary Cookie（shop 接口→shop token，其余→admin token）
+     * 2. 共用接口回退 Cookie（非 C 端专属接口回退 shop token）
+     * 3. 兼容旧版 zbt_token
+     * 4. Authorization Header
+     * 调用方逐个尝试解析，第一个解析成功的生效（避免失效 admin cookie 阻塞有效 shop cookie）
+     */
+    private List<String> extractTokenCandidates(HttpServletRequest request) {
+        List<String> candidates = new java.util.ArrayList<>();
         String path = request.getRequestURI();
 
-        // 1. 优先从 HttpOnly Cookie 读取 — C端接口用 shop token，M端用 admin token
+        // 1. Cookie 候选
         Cookie[] cookies = request.getCookies();
         if (cookies != null) {
+            // C端接口用 shop token，M端用 admin token
             boolean isShopApi = path.startsWith("/api/shop/")
                     || path.startsWith("/api/addresses")
                     || path.startsWith("/api/favorites")
                     || path.startsWith("/api/notifications");
             String primaryCookie = isShopApi ? "zbt_shop_token" : "zbt_admin_token";
-            for (Cookie c : cookies) {
-                if (primaryCookie.equals(c.getName()) && c.getValue() != null && !c.getValue().isEmpty()) {
-                    return c.getValue();
-                }
-            }
-            // 兼容旧版 zbt_token（迁移期过渡）
-            for (Cookie c : cookies) {
-                if ("zbt_token".equals(c.getName()) && c.getValue() != null && !c.getValue().isEmpty()) {
-                    return c.getValue();
-                }
-            }
+            // 非 C 端专属接口（AI、文件上传等双端共用接口）：主 Cookie 缺失或失效时回退 shop Cookie
+            String fallbackCookie = isShopApi ? null : "zbt_shop_token";
+
+            // 按优先级收集 cookie 值（去重）
+            addCookieValue(candidates, cookies, primaryCookie);
+            if (fallbackCookie != null) addCookieValue(candidates, cookies, fallbackCookie);
+            addCookieValue(candidates, cookies, "zbt_token");
         }
+
         // 2. Authorization Header（各端主动设置，不受 Cookie 串扰影响）
         String header = request.getHeader("Authorization");
-        if (header != null && header.startsWith("Bearer ")) return header.substring(7);
-        return null;
+        if (header != null && header.startsWith("Bearer ")) {
+            candidates.add(header.substring(7));
+        }
+        return candidates;
+    }
+
+    private void addCookieValue(List<String> candidates, Cookie[] cookies, String name) {
+        for (Cookie c : cookies) {
+            if (name.equals(c.getName()) && c.getValue() != null && !c.getValue().isEmpty()) {
+                if (!candidates.contains(c.getValue())) {
+                    candidates.add(c.getValue());
+                }
+                break;
+            }
+        }
     }
 
     @Override

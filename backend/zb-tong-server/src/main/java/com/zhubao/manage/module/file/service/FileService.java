@@ -114,7 +114,7 @@ public class FileService {
         String originalName = file.getOriginalFilename();
         String ext = getExtension(originalName);
 
-        // 1. 扩展名白名单
+        // 1. 扩展名白名单（防上传可执行文件等）
         validateExtension(ext);
 
         // 2. 文件大小限制
@@ -122,8 +122,17 @@ public class FileService {
             throw new BusinessException(ErrorCode.FILE_TOO_LARGE.getCode(), "文件大小不能超过20MB");
         }
 
-        // 3. 魔数（Magic Number）校验
-        validateMagicNumber(file, ext);
+        // 3. 魔数（Magic Number）校验 —— 按文件真实内容识别格式
+        //    手机/截图工具常出现"扩展名与实际格式不一致"（如 .jpg 实为 PNG），
+        //    这里以真实格式为准：真实格式在白名单内则接受，并修正扩展名。
+        String realExt = detectRealExtension(file);
+        if (realExt != null) {
+            // 真实格式是受支持的图片/文档格式 → 以真实格式为准（防伪造/防误判）
+            ext = realExt;
+        } else {
+            // 无法识别真实格式：回退到严格的扩展名魔数校验（拦截伪造文件）
+            validateMagicNumberStrict(file, ext);
+        }
 
         // 4. 上传
         String objectName = buildObjectName(ext);
@@ -157,8 +166,45 @@ public class FileService {
         }
     }
 
-    /** 魔数校验 —— 读取文件头字节比对 */
-    private void validateMagicNumber(MultipartFile file, String ext) {
+    /**
+     * 读取文件头识别真实格式（按魔数）。
+     * 识别成功且在白名单内返回对应扩展名；无法识别返回 null。
+     */
+    private String detectRealExtension(MultipartFile file) {
+        try (java.io.InputStream in = file.getInputStream()) {
+            byte[] header = new byte[12];
+            int read = in.read(header);
+            if (read < 4) return null;
+
+            // PNG: 89 50 4E 47
+            if (matches(header, 0, MAGIC_NUMBERS.get("png"))) return "png";
+            // JPEG: FF D8 FF
+            if (matches(header, 0, MAGIC_NUMBERS.get("jpg"))) return "jpg";
+            // GIF: 47 49 46 38
+            if (matches(header, 0, MAGIC_NUMBERS.get("gif"))) return "gif";
+            // WEBP: RIFF....WEBP (52 49 46 46 + size + 57 45 42 50)
+            if (matches(header, 0, MAGIC_NUMBERS.get("webp"))
+                    && read >= 12 && header[8] == 0x57 && header[9] == 0x45
+                    && header[10] == 0x42 && header[11] == 0x50) return "webp";
+            // PDF: 25 50 44 46
+            if (matches(header, 0, MAGIC_NUMBERS.get("pdf"))) return "pdf";
+            return null;
+        } catch (java.io.IOException e) {
+            log.error("文件头读取失败: {}", e.getMessage());
+            return null;
+        }
+    }
+
+    private boolean matches(byte[] header, int offset, byte[] magic) {
+        if (magic == null || header.length < offset + magic.length) return false;
+        for (int i = 0; i < magic.length; i++) {
+            if (header[offset + i] != magic[i]) return false;
+        }
+        return true;
+    }
+
+    /** 严格魔数校验 —— 扩展名与文件头必须一致（用于无法识别真实格式时的兜底） */
+    private void validateMagicNumberStrict(MultipartFile file, String ext) {
         byte[] expected = MAGIC_NUMBERS.get(ext);
         if (expected == null) return; // 无魔数定义的跳过
 
