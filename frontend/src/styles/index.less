@@ -362,7 +362,8 @@
   grid-template-columns: 2fr 1fr;
   gap: @spacing-md;
 
-  @media (max-width: @screen-lg) {
+  /* 与上方图表区断点保持一致（xl 以下全部单列），避免中间宽度下卡片错位不对齐 */
+  @media (max-width: @screen-xl) {
     grid-template-columns: 1fr;
   }
 }

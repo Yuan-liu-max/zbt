@@ -138,6 +138,42 @@
       </a-table>
     </div>
 
+    <!-- 会员等级设置弹窗 -->
+    <a-modal
+      v-model:open="settingsVisible"
+      title="会员等级设置"
+      width="720px"
+      :confirm-loading="settingsSaving"
+      @ok="handleSettingsSave"
+    >
+      <p style="color:#666;margin-bottom:12px">配置各等级积分倍数与折扣率，保存后立即生效；商城端按等级享受对应购物折扣。</p>
+      <a-table
+        :columns="settingsColumns"
+        :data-source="levelSettings"
+        :pagination="false"
+        size="small"
+        row-key="id"
+        :scroll="{ x: 640 }"
+      >
+        <template #bodyCell="{ column, record }">
+          <template v-if="column.key === 'pointsMultiplier'">
+            <a-input-number v-model:value="record.pointsMultiplier" :min="1" :max="10" style="width: 100%" />
+          </template>
+          <template v-if="column.key === 'discount'">
+            <a-input-number v-model:value="record.discount" :min="1" :max="10" :step="0.5" :precision="1" style="width: 100%" />
+          </template>
+          <template v-if="column.key === 'status'">
+            <a-switch
+              :checked="record.status === 'enabled'"
+              checked-children="启用"
+              un-checked-children="停用"
+              @change="(v: boolean) => (record.status = v ? 'enabled' : 'disabled')"
+            />
+          </template>
+        </template>
+      </a-table>
+    </a-modal>
+
     <!-- 新增/编辑弹窗 -->
     <a-modal
       v-model:open="modalVisible"
@@ -287,8 +323,48 @@ const handleAddLevel = () => {
 }
 
 // 等级设置
-const handleLevelSettings = () => {
-  message.info('会员等级设置功能开发中...')
+const settingsVisible = ref(false)
+const settingsSaving = ref(false)
+const levelSettings = ref<MemberLevel[]>([])
+
+const settingsColumns = [
+  { title: '会员等级', dataIndex: 'name', key: 'name', width: 110 },
+  { title: '会员标识', dataIndex: '标识', key: '标识', width: 90 },
+  { title: '会员数量', dataIndex: 'memberCount', key: 'memberCount', width: 90, align: 'right' as const },
+  { title: '积分倍数', key: 'pointsMultiplier', width: 110 },
+  { title: '折扣率', key: 'discount', width: 110 },
+  { title: '状态', key: 'status', width: 90, align: 'center' as const },
+]
+
+const handleLevelSettings = async () => {
+  settingsVisible.value = true
+  try {
+    const res = await memberApi.getList({ page: 1, pageSize: 100 })
+    levelSettings.value = res.list || []
+  } catch {
+    message.error('加载会员等级失败')
+  }
+}
+
+const handleSettingsSave = async () => {
+  settingsSaving.value = true
+  try {
+    for (const lv of levelSettings.value) {
+      await memberApi.update(lv.id, {
+        pointsMultiplier: lv.pointsMultiplier,
+        discount: lv.discount,
+        status: lv.status,
+      })
+    }
+    message.success('会员等级设置已保存')
+    settingsVisible.value = false
+    loadData()
+    loadStats()
+  } catch {
+    message.error('保存失败，请重试')
+  } finally {
+    settingsSaving.value = false
+  }
 }
 
 // 编辑

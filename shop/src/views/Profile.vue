@@ -42,7 +42,7 @@
       <div class="user-card">
         <div class="user-card__bg" />
         <div class="user-card__content">
-          <van-image round width="60" height="60" :src="userStore.userInfo?.avatar || ''">
+          <van-image round width="60" height="60" :src="resolveAvatar(userStore.userInfo?.avatar)">
             <template #error><van-icon name="user-circle-o" size="60" color="#c8a44d" /></template>
           </van-image>
           <div class="flex-1">
@@ -67,7 +67,7 @@
         <van-cell title="我的订单" icon="orders-o" is-link to="/orders" />
         <van-cell title="收货地址" icon="location-o" is-link to="/address" />
         <van-cell title="我的收藏" icon="star-o" is-link to="/favorites" :value="favCount || ''" />
-        <van-cell title="优惠券" icon="coupon-o" is-link value="即将上线" />
+        <van-cell title="优惠券" icon="coupon-o" is-link to="/coupons" :value="couponCount ? `${couponCount} 张` : ''" />
         <van-cell title="消息通知" icon="chat-o" is-link to="/notifications" />
         <van-cell title="AI 智能导购" icon="service-o" is-link to="/ai-guide" />
         <van-cell title="设置" icon="setting-o" is-link to="/settings" />
@@ -96,6 +96,7 @@ import { authApi } from '@/api/auth'
 import { favoriteApi } from '@/api/services'
 import { useUserStore } from '@/stores/useUserStore'
 import { useCartStore } from '@/stores/useCartStore'
+import { resolveAvatar } from '@/utils/url'
 
 const route = useRoute()
 const router = useRouter()

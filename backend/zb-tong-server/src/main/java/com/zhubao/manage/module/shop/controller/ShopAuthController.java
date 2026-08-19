@@ -20,6 +20,7 @@ import com.zhubao.manage.module.order.mapper.OrderMapper;
 import com.zhubao.manage.module.order.entity.Order;
 import com.zhubao.manage.module.shop.mapper.UserFavoriteMapper;
 import com.zhubao.manage.module.shop.entity.UserFavorite;
+import com.zhubao.manage.module.shop.service.ShopCouponService;
 import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiOperation;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -52,6 +53,7 @@ public class ShopAuthController {
     private final JwtUtil jwtUtil;
     private final UserContextHolder userContextHolder;
     private final LoginRateLimiter loginRateLimiter;
+    private final ShopCouponService shopCouponService;
 
     @Value("${app.cookie-secure:false}")
     private boolean cookieSecure;
@@ -60,7 +62,7 @@ public class ShopAuthController {
                               CustomerMapper cm,
                               OrderMapper om, UserFavoriteMapper ufm,
                               PasswordEncoder pe, JwtUtil jwt, UserContextHolder uch,
-                              LoginRateLimiter loginRateLimiter) {
+                              LoginRateLimiter loginRateLimiter, ShopCouponService shopCouponService) {
         this.userMapper = um;
         this.userRoleMapper = urm;
         this.roleMapper = rm;
@@ -71,6 +73,7 @@ public class ShopAuthController {
         this.jwtUtil = jwt;
         this.userContextHolder = uch;
         this.loginRateLimiter = loginRateLimiter;
+        this.shopCouponService = shopCouponService;
     }
 
     @ApiOperation("C端用户注册")
@@ -331,7 +334,7 @@ public class ShopAuthController {
                 new LambdaQueryWrapper<Order>().eq(Order::getUserId, userId)));
         stats.put("favoriteCount", userFavoriteMapper.selectCount(
                 new LambdaQueryWrapper<UserFavorite>().eq(UserFavorite::getUserId, userId)));
-        stats.put("couponCount", 0);
+        stats.put("couponCount", shopCouponService.countUnused(userId));
         return ApiResult.ok(stats);
     }
 

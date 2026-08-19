@@ -13,6 +13,7 @@ public class CreateOrderRequest {
     private String paymentMethod;         // 支付方式: WECHAT/ALIPAY/BALANCE
     private String deliveryMethod;        // 配送方式: EXPRESS/SELF_PICKUP
     private String couponCode;            // 优惠券码(可选)
+    private Long couponId;                // 优惠券ID(可选，C端用户领取的user_coupon.id)
     private String remark;                // 备注
 
     // 直接下单（不通过购物车）
@@ -30,6 +31,8 @@ public class CreateOrderRequest {
     public void setDeliveryMethod(String v) { this.deliveryMethod = v; }
     public String getCouponCode() { return couponCode; }
     public void setCouponCode(String v) { this.couponCode = v; }
+    public Long getCouponId() { return couponId; }
+    public void setCouponId(Long v) { this.couponId = v; }
     public String getRemark() { return remark; }
     public void setRemark(String v) { this.remark = v; }
     public Long getProductId() { return productId; }

@@ -5,7 +5,7 @@
     <!-- ===== 头像区域 ===== -->
     <div class="avatar-section">
       <div class="avatar-wrap" @click="triggerUpload">
-        <van-image round width="80" height="80" :src="userStore.userInfo?.avatar || ''">
+        <van-image round width="80" height="80" :src="resolveAvatar(userStore.userInfo?.avatar)">
           <template #loading><van-icon name="photo-o" size="40" color="#ccc" /></template>
           <template #error><van-icon name="user-circle-o" size="80" color="#c8a44d" /></template>
         </van-image>
@@ -102,6 +102,7 @@ import { showToast, showSuccessToast } from 'vant'
 import { authApi } from '@/api/auth'
 import { uploadApi } from '@/api/services'
 import { useUserStore } from '@/stores/useUserStore'
+import { resolveAvatar } from '@/utils/url'
 
 const router = useRouter()
 const userStore = useUserStore()

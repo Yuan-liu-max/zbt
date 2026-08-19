@@ -61,11 +61,17 @@
     <div class="card">
       <div class="price-row"><span class="text-sm text-secondary">商品总额</span><span class="text-sm">¥{{ cartStore.checkedTotal.toFixed(2) }}</span></div>
       <div class="price-row"><span class="text-sm text-secondary">运费</span><span class="tag tag-green">免运费</span></div>
-      <div class="price-row"><span class="text-sm text-secondary">优惠</span><span class="text-sm text-hint">暂无</span></div>
+      <!-- 优惠券选择 -->
+      <div class="price-row" @click="showCouponPicker = true">
+        <span class="text-sm text-secondary">优惠券</span>
+        <span v-if="selectedCoupon" class="text-sm" style="color:var(--color-danger)">-¥{{ couponDiscount.toFixed(2) }} <van-icon name="arrow" size="12" /></span>
+        <span v-else class="text-sm text-hint">{{ usableCoupons.length ? '选择优惠券' : '暂无可用' }} <van-icon name="arrow" size="12" /></span>
+      </div>
+      <div class="price-row"><span class="text-sm text-secondary">优惠</span><span class="text-sm text-hint">-¥{{ couponDiscount.toFixed(2) }}</span></div>
       <div class="divider" />
       <div class="price-row" style="margin-top:var(--space-sm)">
         <span class="text-base" style="font-weight:var(--weight-semibold)">实付款</span>
-        <span class="price-current price-large" style="color:var(--color-danger)">¥{{ cartStore.checkedTotal.toFixed(2) }}</span>
+        <span class="price-current price-large" style="color:var(--color-danger)">¥{{ payableAmount.toFixed(2) }}</span>
       </div>
     </div>
 
@@ -77,9 +83,32 @@
     <!-- 提交 -->
     <div style="padding:var(--space-xl) var(--space-md) var(--space-4xl)">
       <van-button round block type="danger" :loading="submitting" @click="submitOrder" style="height:48px;font-size:var(--font-lg)">
-        提交订单 ¥{{ cartStore.checkedTotal.toFixed(2) }}
+        提交订单 ¥{{ payableAmount.toFixed(2) }}
       </van-button>
     </div>
+
+    <!-- 优惠券选择弹窗 -->
+    <van-popup v-model:show="showCouponPicker" position="bottom" :style="{ height: '55%' }" round>
+      <div class="popup-header"><span class="text-md" style="font-weight:var(--weight-semibold)">选择优惠券</span></div>
+      <div v-if="usableCoupons.length === 0" class="text-center text-hint" style="padding:40px">暂无可用优惠券，<span class="text-link" @click="$router.push('/promotions')">去领券</span></div>
+      <div
+        v-for="c in usableCoupons"
+        :key="c.id"
+        class="coupon-pick-item"
+        @click="selectCoupon(c)"
+      >
+        <div class="coupon-pick-amount">
+          <template v-if="c.type === 'discount'">{{ c.discountValue ?? 9 }}折</template>
+          <template v-else>¥{{ c.discountValue ?? 0 }}</template>
+        </div>
+        <div class="flex-1">
+          <p class="text-sm" style="font-weight:var(--weight-semibold)">{{ c.name }}</p>
+          <p class="text-xs text-hint mt-xs">{{ c.discountMethod }}</p>
+          <p class="text-xs text-hint mt-xs" v-if="c.threshold > 0">满 {{ c.threshold }} 元可用</p>
+        </div>
+        <van-icon :name="selectedCoupon?.id === c.id ? 'checked' : 'circle'" :color="selectedCoupon?.id === c.id ? '#c8a44d' : '#d9d9d9'" size="20" />
+      </div>
+    </van-popup>
 
     <!-- 地址选择弹窗 (same as before) -->
     <van-popup v-model:show="showAddressPicker" position="bottom" :style="{ height: '60%' }" round>
@@ -116,10 +145,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { showToast } from 'vant'
 import { shopOrderApi } from '@/api/services'
+import { couponApi, type CouponItem } from '@/api/coupon'
 import { useCartStore } from '@/stores/useCartStore'
 import { useUserStore } from '@/stores/useUserStore'
 import { useAddressStore } from '@/stores/useAddressStore'
@@ -136,6 +166,46 @@ const paymentMethod = ref('WECHAT')
 const deliveryMethod = ref('EXPRESS')
 const showAddressPicker = ref(false)
 const showAddressForm = ref(false)
+
+// ---- 优惠券 ----
+const showCouponPicker = ref(false)
+const myCoupons = ref<CouponItem[]>([])
+const selectedCoupon = ref<CouponItem | null>(null)
+
+/** 可用优惠券：未使用 + 门槛达标 */
+const usableCoupons = computed(() => {
+  const total = cartStore.checkedTotal
+  return myCoupons.value.filter(c =>
+    c.status === 'UNUSED' &&
+    (!c.threshold || Number(c.threshold) <= 0 || total >= Number(c.threshold))
+  )
+})
+
+/** 预估优惠金额（与后端 ShopCouponService.calcDiscount 一致） */
+const couponDiscount = computed(() => {
+  const c = selectedCoupon.value
+  const total = cartStore.checkedTotal
+  if (!c) return 0
+  if (c.type === 'discount') {
+    const rate = Number(c.discountValue) || 10
+    return Math.min(total, Number((total * (10 - rate) / 10).toFixed(2)))
+  }
+  return Math.min(total, Number(c.discountValue) || 0)
+})
+
+const payableAmount = computed(() => Math.max(0, Number((cartStore.checkedTotal - couponDiscount.value).toFixed(2))))
+
+async function loadCoupons() {
+  try {
+    const res = await couponApi.mine({ page: 1, pageSize: 50, status: 'UNUSED' })
+    myCoupons.value = res.list || []
+  } catch { /* 非关键 */ }
+}
+
+function selectCoupon(c: CouponItem) {
+  selectedCoupon.value = c
+  showCouponPicker.value = false
+}
 
 const paymentMethods = [
   { label: '微信支付', value: 'WECHAT', icon: '💚' },
@@ -157,6 +227,7 @@ onMounted(async () => {
     addresses.value = addressStore.addresses
     selectedAddress.value = addresses.value.find(a => a.isDefault) || addresses.value[0] || null
   } catch { /* skip */ }
+  loadCoupons()
 })
 
 function selectAddress(addr: AddressItem) { selectedAddress.value = addr; showAddressPicker.value = false }
@@ -182,7 +253,8 @@ async function submitOrder() {
     const data = await shopOrderApi.create({
       cartItemIds: cartItemIds.length > 0 ? cartItemIds : undefined,
       addressId: selectedAddress.value ? Number(selectedAddress.value.id) : undefined,
-      paymentMethod: paymentMethod.value, deliveryMethod: deliveryMethod.value, remark: remark.value
+      paymentMethod: paymentMethod.value, deliveryMethod: deliveryMethod.value, remark: remark.value,
+      couponId: selectedCoupon.value ? Number(selectedCoupon.value.id) : undefined
     })
     showToast('下单成功！')
     cartStore.removeChecked()
@@ -221,6 +293,23 @@ async function submitOrder() {
 .selector-item__icon { font-size: 20px; width: 32px; text-align: center; }
 
 .price-row { display: flex; justify-content: space-between; align-items: center; padding: 4px 0; }
+
+.coupon-pick-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  padding: var(--space-md) var(--space-lg);
+  border-bottom: 1px solid var(--color-gray-100);
+  cursor: pointer;
+}
+.coupon-pick-amount {
+  width: 72px;
+  text-align: center;
+  color: var(--color-primary, #c8a44d);
+  font-size: 15px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
 
 .popup-header { display: flex; justify-content: space-between; align-items: center; padding: var(--space-lg); border-bottom: 1px solid #eee; }
 .address-item { padding: var(--space-md) var(--space-lg); border-bottom: 1px solid var(--color-gray-100); cursor: pointer; }

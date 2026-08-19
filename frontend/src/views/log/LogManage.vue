@@ -13,7 +13,7 @@
             v-model:value="searchForm.dateRange"
             show-time
             format="YYYY-MM-DD HH:mm:ss"
-            style="width: 380px"
+            class="log-range-picker"
           />
         </a-form-item>
         <a-form-item label="操作模块">
@@ -204,6 +204,18 @@ onMounted(() => { loadData() })
 .search-card { padding: 20px 24px; }
 .search-card :deep(.ant-form) { flex-wrap: wrap; }
 .search-card :deep(.ant-form-item) { margin-bottom: 12px; margin-right: 0; }
+
+/* 时间范围选择器：桌面固定宽度，移动端占满一行不溢出 */
+.log-range-picker {
+  width: 380px;
+  max-width: 100%;
+}
+
+@media (max-width: 576px) {
+  .log-range-picker {
+    width: 100%;
+  }
+}
 .table-toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid #f0f0f0; }
 .action-link { font-size: 13px; color: #1890ff; cursor: pointer; }
 .action-link:hover { color: #40a9ff; text-decoration: underline; }

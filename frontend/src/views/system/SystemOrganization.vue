@@ -423,6 +423,48 @@ onMounted(() => {
   min-width: 0;
 }
 
+/* 移动端自适应：左右纵向堆叠，搜索框与树操作区自适应 */
+@media (max-width: 768px) {
+  .page-container {
+    padding: 12px;
+  }
+
+  .org-main {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .org-left {
+    width: 100%;
+    flex-shrink: 1;
+  }
+
+  .org-tree-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .org-tree-header :deep(.ant-input-search) {
+    width: 100% !important;
+  }
+
+  .org-chart {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .org-chart-content {
+    justify-content: flex-start;
+    min-width: max-content;
+    padding: 16px 8px;
+  }
+
+  .tree-actions {
+    opacity: 1;
+  }
+}
+
 .org-tree-header {
   display: flex;
   justify-content: space-between;

@@ -135,6 +135,7 @@
         :pagination="false"
         row-key="rank"
         size="small"
+        :scroll="{ x: 770 }"
       >
         <template #bodyCell="{ column, record }">
           <template v-if="column.key === 'rank'">
@@ -230,8 +231,8 @@ const pieSlices = computed(() => {
 // 排行榜列配置
 const rankingColumns = [
   { title: '排名', dataIndex: 'rank', key: 'rank', width: 70, align: 'center' as const },
-  { title: '商品名称', dataIndex: 'name', key: 'name', width: 150 },
-  { title: '商品编码', dataIndex: 'code', key: 'code', width: 130 },
+  { title: '商品名称', dataIndex: 'name', key: 'name', width: 150, ellipsis: true },
+  { title: '商品编码', dataIndex: 'code', key: 'code', width: 130, ellipsis: true },
   { title: '销售数量', dataIndex: 'quantity', key: 'quantity', width: 100, align: 'center' as const },
   { title: '销售额（元）', dataIndex: 'salesAmount', key: 'salesAmount', width: 140, align: 'right' as const },
   { title: '占比', dataIndex: 'percentage', key: 'percentage', width: 80, align: 'center' as const },

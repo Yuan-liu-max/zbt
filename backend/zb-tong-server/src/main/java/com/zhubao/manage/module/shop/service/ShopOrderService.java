@@ -42,15 +42,17 @@ public class ShopOrderService {
     private final UserAddressMapper addressMapper;
     private final CustomerMapper customerMapper;
     private final OrderService orderService;
+    private final ShopCouponService couponService;
 
     public ShopOrderService(OrderMapper om, OrderItemMapper im, OrderLogMapper lm,
                             OrderReturnMapper rm, ProductMapper pm, ShopCartMapper cm,
                             UserAddressMapper am, CustomerMapper customerMapper,
-                            OrderService os) {
+                            OrderService os, ShopCouponService couponService) {
         this.orderMapper = om; this.itemMapper = im; this.logMapper = lm;
         this.returnMapper = rm; this.productMapper = pm; this.cartMapper = cm;
         this.addressMapper = am; this.customerMapper = customerMapper;
         this.orderService = os;
+        this.couponService = couponService;
     }
 
     /**
@@ -140,12 +142,23 @@ public class ShopOrderService {
         order.setRemark(req.getRemark());
         order.setTotalAmount(totalAmount);
         order.setFreight(BigDecimal.ZERO);
-        order.setCouponDiscount(BigDecimal.ZERO);
-        order.setOrderAmount(totalAmount);
+
+        // 优惠券抵扣（营销三端打通：领取的优惠券在结算时核销）
+        BigDecimal couponDiscount = BigDecimal.ZERO;
+        if (req.getCouponId() != null) {
+            couponDiscount = couponService.calcDiscount(userId, req.getCouponId(), totalAmount);
+        }
+        order.setCouponDiscount(couponDiscount);
+        order.setOrderAmount(totalAmount.subtract(couponDiscount).max(BigDecimal.ZERO));
         order.setItems(orderItems);
 
         // 委托给已有 OrderService 完成插入+扣库存+日志
-        return orderService.create(order);
+        Order saved = orderService.create(order);
+        // 标记优惠券已使用
+        if (req.getCouponId() != null && couponDiscount.compareTo(BigDecimal.ZERO) > 0) {
+            couponService.markUsed(userId, req.getCouponId(), saved.getId(), couponDiscount);
+        }
+        return saved;
     }
 
     /** 我的订单分页 */

@@ -166,9 +166,9 @@ const quickCategories = [
   { name: '钻石', icon: '💎', gradient: 'linear-gradient(135deg, #e0f2fe, #bae6fd)' },
   { name: 'K金', icon: '✨', gradient: 'linear-gradient(135deg, #fef9c3, #fef08a)' },
   { name: '翡翠', icon: '💚', gradient: 'linear-gradient(135deg, #dcfce7, #bbf7d0)' },
-  { name: '珍珠', icon: '🤍', gradient: 'linear-gradient(135deg, #f5f5f4, #e7e5e4)' },
+  { name: '珍珠', icon: '🤍', gradient: 'linear-gradient(135deg, #fdf6f0, #f3ddd0)' },
   { name: '铂金', icon: '🪩', gradient: 'linear-gradient(135deg, #f1f5f9, #e2e8f0)' },
-  { name: '银饰', icon: '⚪', gradient: 'linear-gradient(135deg, #f8fafc, #e2e8f0)' },
+  { name: '银饰', icon: '⚪', gradient: 'linear-gradient(135deg, #f9fafb, #d1d5db)' },
   { name: '其他', icon: '📿', gradient: 'linear-gradient(135deg, #fefce8, #fef9c3)' }
 ]
 

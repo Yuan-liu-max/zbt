@@ -298,7 +298,7 @@ const columns = computed(() => {
     { title: '库存', dataIndex: 'stock', key: 'stock', width: 80, align: 'right' as const },
     { title: '状态', dataIndex: 'status', key: 'status', width: 80, align: 'right' as const },
     { title: '创建时间', dataIndex: 'createdAt', key: 'createdAt', width: 160 },
-    { title: '操作', key: 'action', dataIndex: 'action', width: 100 }
+    { title: '操作', key: 'action', dataIndex: 'action', width: 140 }
   )
 
   return baseColumns
@@ -628,6 +628,11 @@ onMounted(() => {
 
 .action-link {
   font-size: 13px;
+  white-space: nowrap;
+}
+
+.table-card :deep(.ant-table-tbody > tr > td) .ant-space {
+  flex-wrap: nowrap;
 }
 
 .danger-link {
