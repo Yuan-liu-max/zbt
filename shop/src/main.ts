@@ -16,7 +16,8 @@ import {
   SubmitBar, Checkbox, CheckboxGroup, SwipeCell,
   Tabs, Tab, PullRefresh, List, Form, Field,
   ActionSheet, Uploader,
-  Icon, Cell, CellGroup, Switch, Popup, AddressList
+  Icon, Cell, CellGroup, Switch, Popup, AddressList,
+  Area
 } from 'vant'
 
 const app = createApp(App)
@@ -37,7 +38,8 @@ const vantComponents = [
   VanImage, Stepper, SubmitBar, Checkbox, CheckboxGroup, SwipeCell,
   Tabs, Tab, PullRefresh, List, Form, Field,
   ActionSheet, Uploader,
-  Icon, Cell, CellGroup, Switch, Popup, AddressList
+  Icon, Cell, CellGroup, Switch, Popup, AddressList,
+  Area
 ]
 vantComponents.forEach(comp => app.use(comp))
 app.use(Dialog)

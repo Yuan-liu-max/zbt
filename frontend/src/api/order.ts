@@ -30,6 +30,7 @@ export const returnApi = {
 
 export const orderStatusMap: Record<OrderStatus, { color: string; text: string }> = {
   pending: { color: 'orange', text: '待付款' },
+  pending_pay: { color: 'orange', text: '待付款' },
   paid: { color: 'blue', text: '待发货' },
   shipped: { color: 'processing', text: '已发货' },
   completed: { color: 'green', text: '已完成' },

@@ -102,7 +102,15 @@ public class OrderService {
 
         if (StringUtils.isNotBlank(q.getKeyword()))
             w.and(x -> x.like(Order::getOrderCode, q.getKeyword()).or().like(Order::getCustomerName, q.getKeyword()));
-        if (StringUtils.isNotBlank(q.getStatus())) w.eq(Order::getOrderStatus, q.getStatus());
+        if (StringUtils.isNotBlank(q.getStatus())) {
+            // 兼容状态值映射：前端 pending 标签对应实际 PENDING_PAY（下单默认待付款状态）
+            String status = q.getStatus().trim().toUpperCase();
+            if ("PENDING".equals(status)) {
+                w.in(Order::getOrderStatus, "PENDING_PAY", "PENDING");
+            } else {
+                w.eq(Order::getOrderStatus, q.getStatus());
+            }
+        }
         if (StringUtils.isNotBlank(q.getStartDate())) w.ge(Order::getCreatedAt, q.getStartDate() + " 00:00:00");
         if (StringUtils.isNotBlank(q.getEndDate())) w.le(Order::getCreatedAt, q.getEndDate() + " 23:59:59");
         w.orderByDesc(Order::getCreatedAt);

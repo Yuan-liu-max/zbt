@@ -240,7 +240,8 @@ public class ReportService {
                 new LambdaQueryWrapper<TaskInstance>().eq(TaskInstance::getStatus, "SUBMITTED"));
         long storeCount = storeMapper.selectCount(null);
         long pendingOrders = orderMapper.selectCount(
-                new LambdaQueryWrapper<Order>().eq(Order::getOrderStatus, "PENDING"));
+                new LambdaQueryWrapper<Order>()
+                        .in(Order::getOrderStatus, "PENDING_PAY", "PENDING"));
         long pendingPurchases = purchaseOrderMapper.selectCount(
                 new LambdaQueryWrapper<PurchaseOrder>().eq(PurchaseOrder::getStatus, "SUBMITTED"));
         long certExpiring = certificateMapper.selectCount(

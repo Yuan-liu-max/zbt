@@ -173,7 +173,10 @@ export interface AddressItem {
   province: string
   city: string
   district: string
+  street?: string
   detailAddress: string
+  longitude?: number | string
+  latitude?: number | string
   isDefault: boolean | number
 }
 

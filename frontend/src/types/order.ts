@@ -1,7 +1,7 @@
 // 订单管理相关类型定义
 
-// 订单状态
-export type OrderStatus = 'pending' | 'paid' | 'shipped' | 'completed' | 'cancelled' | 'refund'
+// 订单状态（pending_pay 为后端实际写入值，兼容历史 pending）
+export type OrderStatus = 'pending' | 'pending_pay' | 'paid' | 'shipped' | 'completed' | 'cancelled' | 'refund'
 
 // 支付状态
 export type PaymentStatus = 'unpaid' | 'paid' | 'refunded'

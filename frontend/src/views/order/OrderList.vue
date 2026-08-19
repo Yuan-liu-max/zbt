@@ -180,7 +180,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, watch, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { message } from 'ant-design-vue'
 import { SearchOutlined } from '@ant-design/icons-vue'
 import { useCrudTable } from '@/composables/useCrudTable'
@@ -188,9 +188,15 @@ import type { OrderRecord, OrderStatus } from '@/types/order'
 import { orderApi, orderStatusMap } from '@/api/order'
 
 const router = useRouter()
+const route = useRoute()
 
-// 当前标签页
+// 当前标签页（支持从首页待办跳转：/order/list?status=pending）
+const TAB_KEYS = ['all', 'pending', 'paid', 'shipped', 'completed', 'cancelled', 'refund'] as const
 const activeTab = ref<string>('all')
+const queryStatus = String(route.query.status || '').toLowerCase()
+if (TAB_KEYS.includes(queryStatus as any)) {
+  activeTab.value = queryStatus
+}
 
 // 搜索表单
 const searchForm = reactive({

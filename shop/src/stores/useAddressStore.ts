@@ -45,10 +45,15 @@ export const useAddressStore = defineStore('address', () => {
     })
   }
 
+  /** 逆地理编码：经纬度 → 省市区+详细地址（后端代理高德） */
+  async function regeo(lng: number, lat: number) {
+    return await addressApi.regeo(lng, lat)
+  }
+
   const defaultAddress = computed(() => addresses.value.find(a => a.isDefault) || addresses.value[0])
 
   return {
     addresses, loading, defaultAddress,
-    fetchAddresses, createAddress, updateAddress, deleteAddress, setDefault
+    fetchAddresses, createAddress, updateAddress, deleteAddress, setDefault, regeo
   }
 })

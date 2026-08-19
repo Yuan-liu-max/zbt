@@ -2,6 +2,7 @@ package com.zhubao.manage.module.shop.entity;
 
 import com.baomidou.mybatisplus.annotation.*;
 import lombok.Data;
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Data
@@ -15,7 +16,10 @@ public class UserAddress {
     private String province;
     private String city;
     private String district;
+    private String street;
     private String detailAddress;
+    private BigDecimal longitude;
+    private BigDecimal latitude;
     private Integer isDefault;
     @TableField(fill = FieldFill.INSERT)
     private LocalDateTime createdAt;

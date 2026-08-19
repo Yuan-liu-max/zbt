@@ -110,6 +110,10 @@ ai:
     base-url: ${AI_BASE_URL:https://api.openai.com/v1}
     timeout: 120
 
+# 高德地图（C端新增地址定位：逆地理编码）
+amap:
+  key: ${AMAP_KEY:}
+
 logging:
   level:
     root: INFO

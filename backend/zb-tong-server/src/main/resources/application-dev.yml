@@ -42,6 +42,10 @@ ai:
   openai:
     api-key: ${OPENAI_API_KEY:sk-your-key}
 
+# 高德地图 Key（dev 默认：本地定位测试）
+amap:
+  key: ${AMAP_KEY:171aef518e6804f9732b2591479bbf5a}
+
   # DevTools 热更新配置
   devtools:
     restart:
